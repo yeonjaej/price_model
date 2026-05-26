@@ -107,7 +107,15 @@ class PredictionStore:
     # ----- reads -----
 
     def query(self, sql: str) -> pl.DataFrame:
-        return pl.from_arrow(self._conn.execute(sql).arrow())  # type: ignore[return-value]
+        """Run a SELECT and return a polars DataFrame.
+
+        Uses pyarrow Table (not iterator) so that empty results carry a schema
+        and `pl.from_arrow` doesn't raise 'Must pass schema, or at least one
+        RecordBatch'. See:
+        https://duckdb.org/docs/api/python/result_conversion#apache-arrow
+        """
+        arrow_tbl = self._conn.execute(sql).to_arrow_table()
+        return pl.from_arrow(arrow_tbl)  # type: ignore[return-value]
 
     def latest_predictions(
         self,

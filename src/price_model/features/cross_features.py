@@ -154,3 +154,78 @@ class DistanceMA200Rank(Feature):
         panel = panel.with_columns(dist.alias("_tmp"))
         out = panel.with_columns(_rank_in_date(pl.col("_tmp")).alias(self.name))
         return out.drop("_tmp")
+
+
+# -----------------------------------------------------------------------------
+# v2 features — promoted from notebook prototypes (notebooks/01_diagnostics.ipynb).
+# Univariate quick_ic on the panel showed:
+#   - vol_ewm_20:           IC +0.023, t-stat +4.47   (volatility risk premium)
+#   - vol_20_cs_min_dist:   IC +0.022, t-stat +4.00   (volatility regime)
+#   - mom60_minus_dist_ma200: IC -0.013, t-stat -3.25 (overbought / stretched)
+# -----------------------------------------------------------------------------
+
+
+@register
+class VolEwm20(Feature):
+    """EWM volatility with span=20 of daily log returns.
+
+    Exponentially-weighted estimate adapts faster to recent volatility regime
+    changes than `vol_20` (flat window). On this universe, the strongest single
+    feature found in the diagnostic notebook (t-stat 4.47 univariate).
+    """
+
+    name = "vol_ewm_20"
+    inputs = ("adj_close",)
+    lookback_days = 100  # generous for EWM convergence
+
+    def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
+        c = pl.col("adj_close")
+        log_ret = (c.log() - c.log().shift(1)).over("ticker")
+        return panel.with_columns(log_ret.ewm_std(span=20).over("ticker").alias(self.name))
+
+
+@register
+class Vol20CsMinDist(Feature):
+    """vol_20 minus the cross-sectional minimum vol_20 on the same date.
+
+    Captures "how much more volatile is this stock than the calmest name today."
+    Cross-sectionally monotone but robust to fat tails in a different way than
+    ranks (preserves the magnitude of the gap, not just ordering). Univariate
+    t-stat 4.00 in the diagnostic.
+    """
+
+    name = "vol_20_cs_min_dist"
+    inputs = ("adj_close",)
+    lookback_days = 21
+
+    def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
+        c = pl.col("adj_close")
+        log_ret = (c.log() - c.log().shift(1)).over("ticker")
+        vol_20 = log_ret.rolling_std(window_size=20).over("ticker")
+        panel = panel.with_columns(vol_20.alias("_v"))
+        out = panel.with_columns((pl.col("_v") - pl.col("_v").min().over("date")).alias(self.name))
+        return out.drop("_v")
+
+
+@register
+class Mom60MinusDistMA200(Feature):
+    """60-day momentum minus distance-from-200d-MA.
+
+    Captures "trend disagreement": when short-to-medium momentum is high but
+    the stock isn't far above its long-term MA (or vice versa), there's tension
+    that tends to resolve. Negative univariate IC (t-stat -3.25) suggests this
+    is a mean-reversion / overbought signal.
+    """
+
+    name = "mom60_minus_dist_ma200"
+    inputs = ("adj_close",)
+    lookback_days = 200
+
+    def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
+        c = pl.col("adj_close")
+        # 60-day momentum (skipping last 5 to avoid overlap with return_5d)
+        mom60 = (c.shift(5).log() - c.shift(65).log()).over("ticker")
+        # Distance from 200d MA
+        ma200 = c.rolling_mean(window_size=200).over("ticker")
+        dist_ma200 = (c - ma200) / ma200
+        return panel.with_columns((mom60 - dist_ma200).alias(self.name))
