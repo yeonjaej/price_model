@@ -56,3 +56,61 @@ def test_lightgbm_round_trip(synthetic_panel, tmp_path: Path):
     # Round-trip predictions should be identical
     diffs = (preds["prediction"] - preds2["prediction"]).abs()
     assert diffs.max() < 1e-9
+
+
+def test_lightgbm_multiseed_averages_predictions(synthetic_panel, tmp_path: Path):
+    """Multi-seed: train 3 boosters, verify save/load preserves all of them
+    and predictions are the average across seeds."""
+    import numpy as np
+
+    from price_model.models.boosting import LightGBMModel
+
+    m = _matrix(synthetic_panel)
+    cfg = ModelConfig(
+        model_id="lgbm_multiseed",
+        feature_cols=tuple(FEATS),
+        params={
+            "n_estimators": 15,
+            "num_leaves": 7,
+            "min_data_in_leaf": 5,
+            "seeds": [1, 2, 3],
+        },
+    )
+    model = build_model("LightGBMModel", cfg)
+    model.fit(m)
+    assert len(model._boosters) == 3
+
+    preds = model.predict(m.head(20))
+    # Compute the per-seed average manually and verify it matches
+    X = m.head(20).select(FEATS).fill_null(0.0).to_numpy()
+    expected = np.mean([b.predict(X) for b in model._boosters], axis=0)
+    assert (preds["prediction"].to_numpy() - expected).max() < 1e-12
+
+    # Save/load preserves all boosters
+    model.save(tmp_path / "lgbm_multiseed")
+    loaded = LightGBMModel.load(tmp_path / "lgbm_multiseed")
+    assert len(loaded._boosters) == 3
+    preds_loaded = loaded.predict(m.head(20))
+    assert (preds["prediction"] - preds_loaded["prediction"]).abs().max() < 1e-9
+
+
+def test_lightgbm_early_stopping(synthetic_panel):
+    """With val_fraction + early_stopping_rounds, fit completes cleanly and
+    produces a usable booster (best_iteration < n_estimators in practice)."""
+    m = _matrix(synthetic_panel)
+    cfg = ModelConfig(
+        model_id="lgbm_es",
+        feature_cols=tuple(FEATS),
+        params={
+            "n_estimators": 200,
+            "num_leaves": 15,
+            "min_data_in_leaf": 10,
+            "val_fraction": 0.15,
+            "early_stopping_rounds": 20,
+        },
+    )
+    model = build_model("LightGBMModel", cfg)
+    model.fit(m)
+    preds = model.predict(m.head(30))
+    assert preds.height == 30
+    assert preds["prediction"].is_not_null().all()
