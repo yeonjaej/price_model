@@ -1,0 +1,8 @@
+# Default data configuration.
+# Overridden per-experiment in config/experiments/*.yaml.
+
+universe: sp500              # training universe (load from src/price_model/data/universes/)
+predict_universe: top20_2026_01_01   # deployment universe
+start: 2017-01-01
+end: null                    # null => today
+raw_dir: data/raw

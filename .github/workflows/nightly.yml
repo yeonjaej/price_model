@@ -1,0 +1,43 @@
+name: Nightly prediction refresh
+
+on:
+  schedule:
+    - cron: "30 22 * * 1-5"   # 22:30 UTC weekdays (after US market close + settle)
+  workflow_dispatch:
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          pip install uv
+          uv pip install --system -e .
+
+      # In a real deployment the store would live on S3/GCS rather than the repo.
+      # For v0 we restore from a previous run's artifact (or start fresh).
+      - name: Restore prediction store
+        uses: actions/download-artifact@v4
+        with:
+          name: predictions-store
+          path: artifacts/predictions
+        continue-on-error: true
+
+      - name: Refresh data + run experiment
+        run: |
+          python -m price_model.cli refresh-data --universe top20_2026_01_01 --start 2017-01-01
+          python -m price_model.cli run --experiment baseline
+
+      - name: Upload prediction store
+        uses: actions/upload-artifact@v4
+        with:
+          name: predictions-store
+          path: artifacts/predictions/predictions.duckdb
+          retention-days: 30

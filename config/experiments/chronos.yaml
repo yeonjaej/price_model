@@ -1,0 +1,36 @@
+# Chronos zero-shot experiment.
+#
+# Chronos is a pretrained foundation model — no engineered features, no fitting.
+# Predictions are slow (each date is one batched LLM inference). To keep wall-clock
+# reasonable on CPU we restrict to:
+#   - the small deployment universe (top 20 names)
+#   - ~3 years of data
+#   - quarterly "refits" (which are no-ops, just spacing for the harness)
+#
+# Run with: python -m price_model.cli run --experiment chronos
+# Install first with:  pip install ".[chronos]"
+
+experiment_id: chronos_v1
+
+data:
+  universe: top20_2026_01_01
+  start: 2023-01-01
+
+features: []                  # Chronos doesn't use engineered features
+normalize_kind: none
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 63         # quarterly batches of predictions
+  embargo_days: 6
+  min_train_days: 252         # need ~1y of context before first prediction
+
+models:
+  - id: chronos_tiny_v1
+    class: ChronosZeroShot
+    params:
+      model_name: amazon/chronos-t5-tiny
+      context_length: 256
+      num_samples: 20
+      prediction_length: 5
+      device: cpu             # set to "cuda" if you have a GPU

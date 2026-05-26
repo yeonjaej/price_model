@@ -1,0 +1,8 @@
+models:
+  - id: zero_v1
+    class: ZeroPredictor
+    params: {}
+
+  - id: last_return_v1
+    class: LastReturnPredictor
+    params: {}

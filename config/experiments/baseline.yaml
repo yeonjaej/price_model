@@ -1,0 +1,40 @@
+# Default experiment: walk-forward comparison of zero, last-return, and LightGBM
+# on the S&P 500 from 2017 onward.
+
+experiment_id: baseline_v1
+
+data:
+  universe: sp500
+  start: 2017-01-01
+
+features:
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504        # ~2y
+
+models:
+  - id: zero_v1
+    class: ZeroPredictor
+    params: {}
+
+  - id: last_return_v1
+    class: LastReturnPredictor
+    params: {}
+
+  - id: lightgbm_v1
+    class: LightGBMModel
+    params:
+      learning_rate: 0.05
+      num_leaves: 31
+      min_data_in_leaf: 200
+      n_estimators: 400

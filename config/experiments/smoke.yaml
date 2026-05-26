@@ -1,0 +1,36 @@
+# Tiny smoke-test experiment for CI / development verification.
+# Runs in seconds on a handful of tickers.
+
+experiment_id: smoke_v1
+
+data:
+  universe: top20_2026_01_01
+  start: 2022-01-01
+
+features:
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 42
+  embargo_days: 6
+  min_train_days: 252
+
+models:
+  - id: zero_smoke
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_smoke
+    class: LightGBMModel
+    params:
+      learning_rate: 0.1
+      num_leaves: 15
+      min_data_in_leaf: 50
+      n_estimators: 100

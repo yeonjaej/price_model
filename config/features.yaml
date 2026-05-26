@@ -1,0 +1,24 @@
+# Feature pipeline configuration.
+#
+# Each name must be registered in src/price_model/features/. Add new features by writing
+# a class decorated with @register and appending the name here.
+
+features:
+  # Base technicals
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  # Cross-sectional & multi-input features (require sector + market context)
+  - momentum_60_sector_rel
+  - idio_vol_20
+  - momentum_60_rank
+  - vol_20_rank
+  - distance_ma_200_rank
+
+# Cross-sectional normalization: zscore (default), rank, or none.
+normalize_kind: zscore
+
+# Forward target horizon in trading days. Embargo must be >= this.
+target_horizon: 5
