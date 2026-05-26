@@ -16,11 +16,11 @@ column (cross-sectionally normalized) + `y` (forward excess return).
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import polars as pl
 
-import price_model.features.cross_features  # noqa: F401  trigger registration
+import price_model.features.cross_features
 import price_model.features.technical  # noqa: F401  trigger registration
 from price_model.features.base import get_feature
 from price_model.features.cross_sectional import NormKind, normalize
@@ -39,9 +39,7 @@ def build_feature_matrix(
     for name in feature_names:
         out = get_feature(name).compute(out)
     out = normalize(out, feature_cols=list(feature_names), kind=normalize_kind)
-    out = add_forward_excess_return(
-        out, horizon_days=target_horizon, target_col=target_col
-    )
+    out = add_forward_excess_return(out, horizon_days=target_horizon, target_col=target_col)
     return out
 
 

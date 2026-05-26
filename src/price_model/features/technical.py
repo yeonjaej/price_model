@@ -24,8 +24,9 @@ class Return5d(Feature):
 
     def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
         return panel.with_columns(
-            (pl.col("adj_close").log() - pl.col("adj_close").log().shift(5).over("ticker"))
-            .alias(self.name)
+            (pl.col("adj_close").log() - pl.col("adj_close").log().shift(5).over("ticker")).alias(
+                self.name
+            )
         )
 
 

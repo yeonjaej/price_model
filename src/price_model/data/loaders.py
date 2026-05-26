@@ -37,10 +37,8 @@ def load_panel(
 
 def compute_returns(panel: pl.DataFrame, price_col: str = "adj_close") -> pl.DataFrame:
     """Add a log-return column. Sorted within ticker."""
-    return (
-        panel.sort(["ticker", "date"])
-        .with_columns(
-            (pl.col(price_col).log() - pl.col(price_col).log().shift(1).over("ticker"))
-            .alias("log_return")
+    return panel.sort(["ticker", "date"]).with_columns(
+        (pl.col(price_col).log() - pl.col(price_col).log().shift(1).over("ticker")).alias(
+            "log_return"
         )
     )

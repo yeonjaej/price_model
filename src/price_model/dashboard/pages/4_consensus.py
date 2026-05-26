@@ -67,5 +67,4 @@ fig.add_vline(x=0, line_dash="dot", line_color="gray")
 st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("Full table")
-st.dataframe(wide.sort("consensus", descending=True).to_pandas(),
-             use_container_width=True)
+st.dataframe(wide.sort("consensus", descending=True).to_pandas(), use_container_width=True)

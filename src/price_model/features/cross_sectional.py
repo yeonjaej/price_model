@@ -13,7 +13,8 @@ momentum relative to the universe today" rather than a raw price-derived number.
 
 from __future__ import annotations
 
-from typing import Iterable, Literal
+from collections.abc import Iterable
+from typing import Literal
 
 import polars as pl
 
@@ -41,9 +42,7 @@ def normalize(
         elif kind == "rank":
             # rank in [0, 1] across the cross-section
             n = pl.col(col).count().over(date_col)
-            out = out.with_columns(
-                (pl.col(col).rank("average").over(date_col) / n).alias(col)
-            )
+            out = out.with_columns((pl.col(col).rank("average").over(date_col) / n).alias(col))
         else:
             raise ValueError(f"Unknown normalization kind: {kind!r}")
     return out

@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import polars as pl
-
 from price_model.features.pipeline import build_feature_matrix, drop_warmup_rows
 from price_model.models import build_model
 from price_model.models.base import ModelConfig
-
 
 FEATS = ["return_5d", "momentum_60", "vol_20", "rsi_14", "distance_ma_200"]
 
@@ -53,6 +50,7 @@ def test_lightgbm_round_trip(synthetic_panel, tmp_path: Path):
 
     model.save(tmp_path / "lgbm_test")
     from price_model.models.boosting import LightGBMModel
+
     loaded = LightGBMModel.load(tmp_path / "lgbm_test")
     preds2 = loaded.predict(m.head(50))
     # Round-trip predictions should be identical

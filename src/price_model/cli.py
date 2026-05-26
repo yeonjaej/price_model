@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import polars as pl
 import typer
@@ -39,8 +38,8 @@ def _load_yaml(path: Path) -> dict:
 def refresh_data(
     universe: str = "sp500",
     start: str = "2017-01-01",
-    end: Optional[str] = None,
-    tickers: Optional[str] = None,
+    end: str | None = None,
+    tickers: str | None = None,
 ) -> None:
     """Fetch (or extend) the cached price panel for a universe.
 
@@ -66,6 +65,7 @@ def list_features_cmd() -> None:
     table.add_column("name")
     table.add_column("lookback_days")
     from price_model.features.base import FEATURE_REGISTRY
+
     for name in list_features():
         feat = FEATURE_REGISTRY[name]
         table.add_row(name, str(feat.lookback_days))
@@ -151,7 +151,7 @@ def dashboard() -> None:
 
 @app.command("show-predictions")
 def show_predictions(
-    model_id: Optional[str] = None,
+    model_id: str | None = None,
     limit: int = 50,
 ) -> None:
     """Print the latest predictions from the store."""

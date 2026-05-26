@@ -7,12 +7,12 @@ LastReturnPredictor, your fancy model isn't adding much over short-term momentum
 
 from __future__ import annotations
 
-import json
-import numpy as np
-import polars as pl
 from pathlib import Path
 
-from price_model.models.base import Model, ModelConfig, save_config, load_config
+import numpy as np
+import polars as pl
+
+from price_model.models.base import Model, load_config, save_config
 
 
 class ZeroPredictor(Model):
@@ -28,7 +28,7 @@ class ZeroPredictor(Model):
         save_config(self.config, path / "config.json")
 
     @classmethod
-    def load(cls, path: Path) -> "ZeroPredictor":
+    def load(cls, path: Path) -> ZeroPredictor:
         m = cls(load_config(path / "config.json"))
         m._fitted = True
         return m
@@ -45,9 +45,7 @@ class LastReturnPredictor(Model):
 
     def fit(self, panel: pl.DataFrame) -> None:
         if self.SOURCE_FEATURE not in self.config.feature_cols:
-            raise ValueError(
-                f"LastReturnPredictor needs {self.SOURCE_FEATURE!r} in feature_cols"
-            )
+            raise ValueError(f"LastReturnPredictor needs {self.SOURCE_FEATURE!r} in feature_cols")
         self._fitted = True
 
     def predict(self, panel: pl.DataFrame) -> pl.DataFrame:
@@ -59,7 +57,7 @@ class LastReturnPredictor(Model):
         save_config(self.config, path / "config.json")
 
     @classmethod
-    def load(cls, path: Path) -> "LastReturnPredictor":
+    def load(cls, path: Path) -> LastReturnPredictor:
         m = cls(load_config(path / "config.json"))
         m._fitted = True
         return m

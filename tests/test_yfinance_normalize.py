@@ -13,10 +13,7 @@ and verify the adapter produces a canonical polars panel without crashing.
 
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
-import polars as pl
 
 from price_model.data.sources.yfinance_source import _normalize_pandas_frame
 
@@ -46,9 +43,7 @@ def test_normalize_single_level():
 def test_normalize_field_ticker_multiindex():
     """MultiIndex with ('Field', 'Ticker') ordering."""
     base = _make_single_level_frame()
-    base.columns = pd.MultiIndex.from_tuples(
-        [(c, "AAPL") for c in base.columns]
-    )
+    base.columns = pd.MultiIndex.from_tuples([(c, "AAPL") for c in base.columns])
     df = _normalize_pandas_frame(base, "AAPL")
     assert "adj_close" in df.columns
     assert len(df) == 3
@@ -57,9 +52,7 @@ def test_normalize_field_ticker_multiindex():
 def test_normalize_ticker_field_multiindex():
     """MultiIndex with ('Ticker', 'Field') ordering — the layout that broke v0."""
     base = _make_single_level_frame()
-    base.columns = pd.MultiIndex.from_tuples(
-        [("AAPL", c) for c in base.columns]
-    )
+    base.columns = pd.MultiIndex.from_tuples([("AAPL", c) for c in base.columns])
     df = _normalize_pandas_frame(base, "AAPL")
     assert set(df.columns) == {"date", "open", "high", "low", "close", "adj_close", "volume"}
     assert len(df) == 3

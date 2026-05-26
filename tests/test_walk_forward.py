@@ -7,7 +7,8 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
+from itertools import pairwise
 
 import pytest
 
@@ -41,7 +42,7 @@ def test_splits_are_ordered_and_non_overlapping():
             min_train_days=252,
         )
     )
-    for prev, curr in zip(splits, splits[1:]):
+    for prev, curr in pairwise(splits):
         assert prev.test_end < curr.test_start, f"Overlap: {prev} -> {curr}"
 
 

@@ -18,8 +18,8 @@ downstream are honest.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import date, datetime
-from typing import Sequence
 
 import polars as pl
 
@@ -56,9 +56,7 @@ def run_walk_forward(
         raise ValueError("Panel has no dates")
 
     if embargo_days < horizon_days:
-        raise ValueError(
-            f"embargo_days ({embargo_days}) must be >= horizon_days ({horizon_days})"
-        )
+        raise ValueError(f"embargo_days ({embargo_days}) must be >= horizon_days ({horizon_days})")
 
     all_preds: list[pl.DataFrame] = []
     splits: list[Split] = list(
@@ -111,7 +109,5 @@ def join_with_realized(
 
     Returns columns: (date, ticker, prediction, realized).
     """
-    realized = panel_with_target.select(
-        "date", "ticker", pl.col(target_col).alias("realized")
-    )
+    realized = panel_with_target.select("date", "ticker", pl.col(target_col).alias("realized"))
     return predictions.join(realized, on=["date", "ticker"], how="left")

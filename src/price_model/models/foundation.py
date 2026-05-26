@@ -30,11 +30,11 @@ log = logging.getLogger(__name__)
 
 DEFAULT_PARAMS: dict[str, Any] = {
     "model_name": "amazon/chronos-t5-tiny",  # smallest; bump to -small for accuracy
-    "context_length": 256,                    # trailing days fed as context
-    "num_samples": 20,                        # samples for probabilistic forecast
-    "prediction_length": 5,                   # must match the target horizon
-    "device": "cpu",                          # "cuda" if you have a GPU
-    "log_every_n_dates": 25,                  # progress logging cadence
+    "context_length": 256,  # trailing days fed as context
+    "num_samples": 20,  # samples for probabilistic forecast
+    "prediction_length": 5,  # must match the target horizon
+    "device": "cpu",  # "cuda" if you have a GPU
+    "log_every_n_dates": 25,  # progress logging cadence
 }
 
 
@@ -76,9 +76,7 @@ class ChronosZeroShot(Model):
         """No training — only capture history for context lookup at predict time."""
         if "adj_close" not in panel.columns:
             raise ValueError("ChronosZeroShot requires 'adj_close' in the input panel")
-        self._history = (
-            panel.select("date", "ticker", "adj_close").sort(["ticker", "date"])
-        )
+        self._history = panel.select("date", "ticker", "adj_close").sort(["ticker", "date"])
         self._fitted = True
 
     def predict(self, panel: pl.DataFrame) -> pl.DataFrame:
@@ -98,12 +96,14 @@ class ChronosZeroShot(Model):
         # Combine stored history with anything new in the predict panel so context
         # stays fresh across dates within a single walk-forward window.
         combined = (
-            pl.concat([
-                self._history if self._history is not None else panel.select(
-                    "date", "ticker", "adj_close"
-                ),
-                panel.select("date", "ticker", "adj_close"),
-            ])
+            pl.concat(
+                [
+                    self._history
+                    if self._history is not None
+                    else panel.select("date", "ticker", "adj_close"),
+                    panel.select("date", "ticker", "adj_close"),
+                ]
+            )
             .unique(subset=["date", "ticker"])
             .sort(["ticker", "date"])
         )
@@ -119,9 +119,7 @@ class ChronosZeroShot(Model):
         n_dates = len(unique_dates)
 
         for d_idx, d in enumerate(unique_dates):
-            target_tickers = (
-                panel.filter(pl.col("date") == pl.lit(d))["ticker"].to_list()
-            )
+            target_tickers = panel.filter(pl.col("date") == pl.lit(d))["ticker"].to_list()
             contexts: list[torch.Tensor] = []
             valid_tickers: list[str] = []
             current_prices: list[float] = []
@@ -165,13 +163,16 @@ class ChronosZeroShot(Model):
             lower = lower_raw - xs_mean
             upper = upper_raw - xs_mean
 
-            for t, p, lo, hi in zip(valid_tickers, preds, lower, upper):
-                out_rows.append({
-                    "date": d, "ticker": t,
-                    "prediction": float(p),
-                    "pred_lower": float(lo),
-                    "pred_upper": float(hi),
-                })
+            for t, p, lo, hi in zip(valid_tickers, preds, lower, upper, strict=True):
+                out_rows.append(
+                    {
+                        "date": d,
+                        "ticker": t,
+                        "prediction": float(p),
+                        "pred_lower": float(lo),
+                        "pred_upper": float(hi),
+                    }
+                )
 
             if log_every > 0 and (d_idx + 1) % log_every == 0:
                 log.info("Chronos progress: %d/%d dates", d_idx + 1, n_dates)
@@ -179,9 +180,11 @@ class ChronosZeroShot(Model):
         if not out_rows:
             return pl.DataFrame(
                 schema={
-                    "date": pl.Date, "ticker": pl.Utf8,
+                    "date": pl.Date,
+                    "ticker": pl.Utf8,
                     "prediction": pl.Float64,
-                    "pred_lower": pl.Float64, "pred_upper": pl.Float64,
+                    "pred_lower": pl.Float64,
+                    "pred_upper": pl.Float64,
                 }
             )
         return pl.DataFrame(out_rows).sort(["date", "ticker"])
@@ -191,7 +194,7 @@ class ChronosZeroShot(Model):
         save_config(self.config, path / "config.json")
 
     @classmethod
-    def load(cls, path: Path) -> "ChronosZeroShot":
+    def load(cls, path: Path) -> ChronosZeroShot:
         model = cls(load_config(path / "config.json"))
         model._fitted = True
         return model

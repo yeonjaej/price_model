@@ -14,8 +14,8 @@ pass: SELECT prediction_date AS date, ticker, prediction, realized FROM ....
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 import numpy as np
 import polars as pl
@@ -28,12 +28,12 @@ class MetricSummary:
 
     n_observations: int
     n_dates: int
-    information_coefficient: float    # avg per-date Spearman
-    ic_t_stat: float                  # mean(IC) / (std(IC)/sqrt(n_dates))
-    hit_rate: float                   # fraction of correct sign predictions
+    information_coefficient: float  # avg per-date Spearman
+    ic_t_stat: float  # mean(IC) / (std(IC)/sqrt(n_dates))
+    hit_rate: float  # fraction of correct sign predictions
     mae: float
     rmse: float
-    long_short_sharpe: float          # annualized Sharpe of decile L/S portfolio
+    long_short_sharpe: float  # annualized Sharpe of decile L/S portfolio
 
     def as_dict(self) -> dict[str, float]:
         return {
@@ -60,9 +60,7 @@ def _per_date_ic(df: pl.DataFrame) -> pl.DataFrame:
         rho, _ = spearmanr(sub["prediction"].to_numpy(), sub["realized"].to_numpy())
         if rho is not None and not math.isnan(rho):
             rows.append({"date": d[0] if isinstance(d, tuple) else d, "ic": float(rho)})
-    return pl.DataFrame(rows) if rows else pl.DataFrame(
-        schema={"date": pl.Date, "ic": pl.Float64}
-    )
+    return pl.DataFrame(rows) if rows else pl.DataFrame(schema={"date": pl.Date, "ic": pl.Float64})
 
 
 def _long_short_returns(df: pl.DataFrame, top_frac: float = 0.2) -> pl.DataFrame:
@@ -77,29 +75,29 @@ def _long_short_returns(df: pl.DataFrame, top_frac: float = 0.2) -> pl.DataFrame
         n = sub.height
         if n < 10:
             continue
-        k = max(1, int(round(n * top_frac)))
+        k = max(1, round(n * top_frac))
         sorted_sub = sub.sort("prediction")
         bot = sorted_sub.head(k)["realized"].to_numpy()
         top = sorted_sub.tail(k)["realized"].to_numpy()
         ret = float(top.mean() - bot.mean())
         rows.append({"date": d[0] if isinstance(d, tuple) else d, "ret": ret})
-    return pl.DataFrame(rows) if rows else pl.DataFrame(
-        schema={"date": pl.Date, "ret": pl.Float64}
-    )
+    return pl.DataFrame(rows) if rows else pl.DataFrame(schema={"date": pl.Date, "ret": pl.Float64})
 
 
 def summarize(df: pl.DataFrame, horizon_days: int = 5) -> MetricSummary:
     """Compute all standard metrics on a (date, ticker, prediction, realized) frame."""
     valid = df.drop_nulls(subset=["prediction", "realized"])
     if valid.height == 0:
-        return MetricSummary(0, 0, float("nan"), float("nan"), float("nan"),
-                             float("nan"), float("nan"), float("nan"))
+        return MetricSummary(
+            0, 0, float("nan"), float("nan"), float("nan"), float("nan"), float("nan"), float("nan")
+        )
 
     err = (valid["prediction"] - valid["realized"]).to_numpy()
     mae = float(np.mean(np.abs(err)))
-    rmse = float(np.sqrt(np.mean(err ** 2)))
-    hit_rate = float(np.mean(np.sign(valid["prediction"].to_numpy()) ==
-                             np.sign(valid["realized"].to_numpy())))
+    rmse = float(np.sqrt(np.mean(err**2)))
+    hit_rate = float(
+        np.mean(np.sign(valid["prediction"].to_numpy()) == np.sign(valid["realized"].to_numpy()))
+    )
 
     ic_df = _per_date_ic(valid)
     if ic_df.height >= 2:
@@ -153,6 +151,13 @@ def compare_models(
         summary["model_id"] = mid
         rows.append(summary)
     return pl.DataFrame(rows).select(
-        "model_id", "n_observations", "n_dates", "information_coefficient",
-        "ic_t_stat", "hit_rate", "mae", "rmse", "long_short_sharpe",
+        "model_id",
+        "n_observations",
+        "n_dates",
+        "information_coefficient",
+        "ic_t_stat",
+        "hit_rate",
+        "mae",
+        "rmse",
+        "long_short_sharpe",
     )

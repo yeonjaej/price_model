@@ -25,19 +25,17 @@ MODEL_REGISTRY: dict[str, type[Model]] = {
 
 def build_model(class_name: str, config: ModelConfig) -> Model:
     if class_name not in MODEL_REGISTRY:
-        raise KeyError(
-            f"Unknown model {class_name!r}. Known: {sorted(MODEL_REGISTRY)}"
-        )
+        raise KeyError(f"Unknown model {class_name!r}. Known: {sorted(MODEL_REGISTRY)}")
     return MODEL_REGISTRY[class_name](config)
 
 
 __all__ = [
+    "MODEL_REGISTRY",
+    "ChronosZeroShot",
+    "LastReturnPredictor",
+    "LightGBMModel",
     "Model",
     "ModelConfig",
     "ZeroPredictor",
-    "LastReturnPredictor",
-    "LightGBMModel",
-    "ChronosZeroShot",
-    "MODEL_REGISTRY",
     "build_model",
 ]

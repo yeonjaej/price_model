@@ -10,9 +10,9 @@ up to (refit_date - embargo) and predict for the next `refit_freq` window.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Iterator
 
 import polars as pl
 
@@ -21,18 +21,18 @@ import polars as pl
 class Split:
     """One walk-forward fold."""
 
-    refit_date: date          # the cutoff for training data
-    train_end: date           # last date used for training (refit_date - embargo)
-    test_start: date          # first date predictions are made for
-    test_end: date            # last date predictions are made for (inclusive)
+    refit_date: date  # the cutoff for training data
+    train_end: date  # last date used for training (refit_date - embargo)
+    test_start: date  # first date predictions are made for
+    test_end: date  # last date predictions are made for (inclusive)
 
 
 def walk_forward_splits(
     start: date,
     end: date,
-    refit_freq_days: int = 21,        # ~monthly
-    embargo_days: int = 6,            # must be >= horizon
-    min_train_days: int = 252 * 2,    # ~2y warmup before first refit
+    refit_freq_days: int = 21,  # ~monthly
+    embargo_days: int = 6,  # must be >= horizon
+    min_train_days: int = 252 * 2,  # ~2y warmup before first refit
 ) -> Iterator[Split]:
     """Yield Split objects covering [start + min_train_days, end]."""
     if embargo_days < 1:

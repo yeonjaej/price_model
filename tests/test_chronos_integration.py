@@ -34,11 +34,13 @@ def test_chronos_fit_does_not_require_torch():
     """fit() only captures history; should work even without the optional deps."""
     cfg = ModelConfig(model_id="chronos_test", feature_cols=())
     model = build_model("ChronosZeroShot", cfg)
-    panel = pl.DataFrame({
-        "date": [date(2024, 1, 1), date(2024, 1, 2)],
-        "ticker": ["AAPL", "AAPL"],
-        "adj_close": [100.0, 101.0],
-    })
+    panel = pl.DataFrame(
+        {
+            "date": [date(2024, 1, 1), date(2024, 1, 2)],
+            "ticker": ["AAPL", "AAPL"],
+            "adj_close": [100.0, 101.0],
+        }
+    )
     model.fit(panel)  # must not raise
     assert model._fitted
 
@@ -50,9 +52,13 @@ def test_chronos_predict_raises_clean_import_error_when_missing():
         pytest.skip("chronos installed — can't test the missing-dep path here")
     cfg = ModelConfig(model_id="chronos_test", feature_cols=())
     model = build_model("ChronosZeroShot", cfg)
-    panel = pl.DataFrame({
-        "date": [date(2024, 1, 1)], "ticker": ["AAPL"], "adj_close": [100.0],
-    })
+    panel = pl.DataFrame(
+        {
+            "date": [date(2024, 1, 1)],
+            "ticker": ["AAPL"],
+            "adj_close": [100.0],
+        }
+    )
     model.fit(panel)
     with pytest.raises(ImportError, match="optional dependency"):
         model.predict(panel)
@@ -64,21 +70,28 @@ def test_chronos_round_trip_small_real():
     cfg = ModelConfig(
         model_id="chronos_smoke",
         feature_cols=(),
-        params={"model_name": "amazon/chronos-t5-tiny", "num_samples": 5,
-                "context_length": 60, "prediction_length": 5, "device": "cpu"},
+        params={
+            "model_name": "amazon/chronos-t5-tiny",
+            "num_samples": 5,
+            "context_length": 60,
+            "prediction_length": 5,
+            "device": "cpu",
+        },
     )
     model = build_model("ChronosZeroShot", cfg)
     start = date(2024, 1, 1)
     rows = []
     for t, base in [("AAA", 100.0), ("BBB", 50.0)]:
         for i in range(80):
-            rows.append({
-                "date": start + timedelta(days=i),
-                "ticker": t,
-                "adj_close": base * (1 + 0.001 * i),
-            })
+            rows.append(
+                {
+                    "date": start + timedelta(days=i),
+                    "ticker": t,
+                    "adj_close": base * (1 + 0.001 * i),
+                }
+            )
     panel = pl.DataFrame(rows)
-    model.fit(panel.head(140))   # train on first 70 days per ticker
+    model.fit(panel.head(140))  # train on first 70 days per ticker
     preds = model.predict(panel.tail(20))
     assert preds.height >= 1
     assert "prediction" in preds.columns

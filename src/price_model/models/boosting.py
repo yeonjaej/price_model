@@ -6,13 +6,12 @@ No stock-identity feature — so it generalizes to any ticker at inference time.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 
-from price_model.models.base import Model, ModelConfig, save_config, load_config
+from price_model.models.base import Model, ModelConfig, load_config, save_config
 
 DEFAULT_PARAMS = {
     "objective": "regression",
@@ -74,7 +73,13 @@ class LightGBMModel(Model):
         self._check_fitted()
         assert self._booster is not None
         importance = self._booster.feature_importance(importance_type="gain")
-        return dict(zip(list(self.config.feature_cols), [float(x) for x in importance]))
+        return dict(
+            zip(
+                list(self.config.feature_cols),
+                [float(x) for x in importance],
+                strict=True,
+            )
+        )
 
     def save(self, path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
@@ -83,7 +88,7 @@ class LightGBMModel(Model):
             self._booster.save_model(str(path / "booster.txt"))
 
     @classmethod
-    def load(cls, path: Path) -> "LightGBMModel":
+    def load(cls, path: Path) -> LightGBMModel:
         import lightgbm as lgb
 
         config = load_config(path / "config.json")

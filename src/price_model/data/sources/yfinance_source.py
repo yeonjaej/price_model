@@ -20,9 +20,9 @@ Robustness notes:
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from datetime import date, datetime
 from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
 import polars as pl
@@ -78,7 +78,9 @@ def _flatten_multiindex(df: pd.DataFrame) -> pd.DataFrame:
         df.columns = pd.Index(level1)
     else:
         # Neither level has field names — concatenate as fallback
-        df.columns = pd.Index([f"{a}_{b}" if b else str(a) for a, b in zip(level0, level1)])
+        df.columns = pd.Index(
+            [f"{a}_{b}" if b else str(a) for a, b in zip(level0, level1, strict=True)]
+        )
     return df
 
 
@@ -152,8 +154,7 @@ def _yf_download_one(
             time.sleep(retry_sleep_s)
 
     if df is None or df.empty:
-        log.warning("yfinance returned no data for %s after %d attempts",
-                    ticker, max_retries + 1)
+        log.warning("yfinance returned no data for %s after %d attempts", ticker, max_retries + 1)
         return pl.DataFrame(schema=PANEL_SCHEMA)
 
     try:
@@ -191,8 +192,12 @@ def fetch(
     """
     raw_dir = raw_dir or Path("data/raw")
     raw_dir.mkdir(parents=True, exist_ok=True)
-    end_date = end if isinstance(end, date) else (
-        datetime.fromisoformat(end).date() if isinstance(end, str) else datetime.today().date()
+    end_date = (
+        end
+        if isinstance(end, date)
+        else (
+            datetime.fromisoformat(end).date() if isinstance(end, str) else datetime.today().date()
+        )
     )
 
     frames: list[pl.DataFrame] = []
@@ -206,11 +211,7 @@ def fetch(
                 fetch_start = str(cached_max) if cached_max else str(start)
                 new_rows = _yf_download_one(ticker, fetch_start, end_date)
                 if new_rows.height:
-                    df = (
-                        pl.concat([df, new_rows])
-                        .unique(subset=["date", "ticker"])
-                        .sort("date")
-                    )
+                    df = pl.concat([df, new_rows]).unique(subset=["date", "ticker"]).sort("date")
                     df.write_parquet(cache)
         else:
             df = _yf_download_one(ticker, start, end_date)

@@ -58,10 +58,22 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 ignore = ["E501"]  # line length handled by formatter
 
+[tool.ruff.lint.per-file-ignores]
+# Capital X for feature matrix is universal ML convention — keep it.
+"src/price_model/models/*.py" = ["N806"]
+
 [tool.pyright]
 include = ["src", "tests"]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
+# torch and chronos are optional extras — guarded by try/except at import sites.
+# polars/duckdb return loose union types (e.g. min() -> PythonLiteral) that pyright
+# can't narrow without per-call casts. We downgrade these to warnings rather than
+# scatter type:ignore comments through otherwise-clean code.
+reportMissingImports = "warning"
+reportArgumentType = "warning"
+reportReturnType = "warning"
+reportOperatorIssue = "warning"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

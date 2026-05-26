@@ -39,10 +39,9 @@ class MomentumSectorRelative(Feature):
         mom = (c.shift(5).log() - c.shift(65).log()).over("ticker")
         panel = panel.with_columns(mom.alias("_tmp_mom60"))
         out = panel.with_columns(
-            (
-                pl.col("_tmp_mom60")
-                - pl.col("_tmp_mom60").median().over(["date", "sector"])
-            ).alias(self.name)
+            (pl.col("_tmp_mom60") - pl.col("_tmp_mom60").median().over(["date", "sector"])).alias(
+                self.name
+            )
         )
         return out.drop("_tmp_mom60")
 
@@ -72,22 +71,14 @@ class IdioVol20(Feature):
         panel = panel.with_columns(log_ret.alias("_ret"))
 
         # Cross-sectional mean return per date (the "market") — uses only same-date data
-        panel = panel.with_columns(
-            pl.col("_ret").mean().over("date").alias("_mkt_ret")
-        )
+        panel = panel.with_columns(pl.col("_ret").mean().over("date").alias("_mkt_ret"))
 
         # 60-day rolling beta via cov / var, per ticker
         mean_x = pl.col("_ret").rolling_mean(window_size=60).over("ticker")
         mean_y = pl.col("_mkt_ret").rolling_mean(window_size=60).over("ticker")
-        mean_xy = (
-            (pl.col("_ret") * pl.col("_mkt_ret"))
-            .rolling_mean(window_size=60)
-            .over("ticker")
-        )
+        mean_xy = (pl.col("_ret") * pl.col("_mkt_ret")).rolling_mean(window_size=60).over("ticker")
         mean_y2 = (
-            (pl.col("_mkt_ret") * pl.col("_mkt_ret"))
-            .rolling_mean(window_size=60)
-            .over("ticker")
+            (pl.col("_mkt_ret") * pl.col("_mkt_ret")).rolling_mean(window_size=60).over("ticker")
         )
         cov_xy = mean_xy - mean_x * mean_y
         var_y = mean_y2 - mean_y * mean_y
@@ -112,10 +103,7 @@ def _rank_in_date(expr: pl.Expr) -> pl.Expr:
 
     A standalone helper so the rank features stay readable.
     """
-    return (
-        expr.rank("average").over("date")
-        / expr.count().over("date")
-    )
+    return expr.rank("average").over("date") / expr.count().over("date")
 
 
 @register

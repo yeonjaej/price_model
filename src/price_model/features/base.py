@@ -21,9 +21,9 @@ import polars as pl
 class Feature(ABC):
     """Base class for a feature."""
 
-    name: ClassVar[str]               # column name in the output panel
+    name: ClassVar[str]  # column name in the output panel
     version: ClassVar[int] = 1
-    inputs: ClassVar[tuple[str, ...]] = ()   # required input columns
+    inputs: ClassVar[tuple[str, ...]] = ()  # required input columns
     lookback_days: ClassVar[int] = 0  # max history needed to compute one value
 
     @abstractmethod
@@ -52,7 +52,7 @@ def register(cls: type[Feature]) -> type[Feature]:
 
 def _trigger_registration() -> None:
     """Import every module that contains @register'd Feature subclasses."""
-    import price_model.features.cross_features  # noqa: F401
+    import price_model.features.cross_features
     import price_model.features.technical  # noqa: F401
 
 
@@ -60,9 +60,7 @@ def get_feature(name: str) -> Feature:
     if name not in FEATURE_REGISTRY:
         _trigger_registration()
     if name not in FEATURE_REGISTRY:
-        raise KeyError(
-            f"Feature {name!r} not registered. Known: {sorted(FEATURE_REGISTRY)}"
-        )
+        raise KeyError(f"Feature {name!r} not registered. Known: {sorted(FEATURE_REGISTRY)}")
     return FEATURE_REGISTRY[name]
 
 

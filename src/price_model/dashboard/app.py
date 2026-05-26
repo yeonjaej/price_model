@@ -8,8 +8,6 @@ Pages live in dashboard/pages/ and are auto-discovered by Streamlit's multi-page
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import streamlit as st
 
 from price_model.dashboard._common import get_store, store_health

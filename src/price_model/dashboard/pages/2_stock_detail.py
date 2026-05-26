@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import plotly.express as px
-import polars as pl
 import streamlit as st
 
 from price_model.dashboard._common import get_store, query_df

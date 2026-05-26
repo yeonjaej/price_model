@@ -6,8 +6,8 @@ then computes IC, hit rate, and long-short Sharpe in rolling windows.
 
 from __future__ import annotations
 
-import polars as pl
 import plotly.express as px
+import polars as pl
 import streamlit as st
 
 from price_model.dashboard._common import get_store, list_models, query_df
@@ -57,19 +57,22 @@ st.dataframe(summary.to_pandas(), use_container_width=True)
 
 st.subheader("Rolling 60-day information coefficient")
 # Simple rolling IC: per-model, per-month, IC over the month
-joined = joined.with_columns(
-    pl.col("date").dt.truncate("1mo").alias("month")
-)
+joined = joined.with_columns(pl.col("date").dt.truncate("1mo").alias("month"))
 monthly_ic_rows = []
 for (model_id, month), grp in joined.group_by(["model_id", "month"]):
-    summ = compare_models(grp.select("date", "ticker", "prediction", "realized")
-                            .with_columns(pl.lit(model_id).alias("model_id")),
-                          horizon_days=int(horizon))
-    monthly_ic_rows.append({
-        "model_id": model_id,
-        "month": month,
-        "ic": summ["information_coefficient"][0],
-    })
+    summ = compare_models(
+        grp.select("date", "ticker", "prediction", "realized").with_columns(
+            pl.lit(model_id).alias("model_id")
+        ),
+        horizon_days=int(horizon),
+    )
+    monthly_ic_rows.append(
+        {
+            "model_id": model_id,
+            "month": month,
+            "ic": summ["information_coefficient"][0],
+        }
+    )
 if monthly_ic_rows:
     monthly = pl.DataFrame(monthly_ic_rows).sort("month")
     fig = px.line(monthly.to_pandas(), x="month", y="ic", color="model_id")

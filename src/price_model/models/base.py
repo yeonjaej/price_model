@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import polars as pl
 
@@ -24,7 +25,7 @@ import polars as pl
 class ModelConfig:
     """Minimal model config shared by every model."""
 
-    model_id: str                              # e.g. "lightgbm_v1"
+    model_id: str  # e.g. "lightgbm_v1"
     feature_cols: Sequence[str]
     target_col: str = "y"
     params: dict[str, Any] = field(default_factory=dict)
@@ -52,7 +53,7 @@ class Model(ABC):
 
     @classmethod
     @abstractmethod
-    def load(cls, path: Path) -> "Model": ...
+    def load(cls, path: Path) -> Model: ...
 
     # ------- shared helpers -------
 

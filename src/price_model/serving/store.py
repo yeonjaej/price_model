@@ -12,9 +12,9 @@ Why DuckDB:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, datetime
 from pathlib import Path
-from typing import Iterable
 
 import duckdb
 import polars as pl
@@ -72,8 +72,9 @@ class PredictionStore:
         df = predictions.rename({"date": "prediction_date"})
         # Compute target_date = prediction_date + horizon_days
         df = df.with_columns(
-            (pl.col("prediction_date").cast(pl.Date) + pl.duration(days=horizon_days))
-            .alias("target_date"),
+            (pl.col("prediction_date").cast(pl.Date) + pl.duration(days=horizon_days)).alias(
+                "target_date"
+            ),
             pl.lit(generated_at).alias("generated_at"),
             pl.lit(horizon_days).cast(pl.Int32).alias("horizon_days"),
             pl.lit(model_id).alias("model_id"),
@@ -136,16 +137,14 @@ class PredictionStore:
         return df["model_id"].to_list() if df.height else []
 
     def clear_experiment(self, experiment_id: str) -> int:
-        cur = self._conn.execute(
-            "DELETE FROM predictions WHERE experiment_id = ?", [experiment_id]
-        )
-        # DuckDB doesn't return affected rows from DELETE in all versions; ignore.
-        return 0 if cur is None else 0
+        self._conn.execute("DELETE FROM predictions WHERE experiment_id = ?", [experiment_id])
+        # DuckDB doesn't return affected rows from DELETE in all versions; just return 0.
+        return 0
 
     def close(self) -> None:
         self._conn.close()
 
-    def __enter__(self) -> "PredictionStore":
+    def __enter__(self) -> PredictionStore:
         return self
 
     def __exit__(self, *a) -> None:

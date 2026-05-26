@@ -15,7 +15,7 @@ import math
 import polars as pl
 import pytest
 
-import price_model.features.cross_features  # noqa: F401  trigger registration
+import price_model.features.cross_features
 import price_model.features.technical  # noqa: F401  trigger registration
 from price_model.features.base import FEATURE_REGISTRY
 
@@ -32,7 +32,7 @@ def test_feature_is_truncation_invariant(feature_name, synthetic_panel):
     # Pick a few interior dates to truncate at — avoid the warmup region
     all_dates = sorted(synthetic_panel["date"].unique().to_list())
     sample_dates = all_dates[
-        max(feature.lookback_days + 10, 50)::100  # every ~100 days
+        max(feature.lookback_days + 10, 50) :: 100  # every ~100 days
     ][:5]
     assert sample_dates, "Need at least one test date past warmup"
 
@@ -41,16 +41,12 @@ def test_feature_is_truncation_invariant(feature_name, synthetic_panel):
         truncated = feature.compute(truncated_panel.sort(["ticker", "date"]))
 
         for ticker in synthetic_panel["ticker"].unique():
-            full_val = (
-                full.filter((pl.col("date") == cutoff) & (pl.col("ticker") == ticker))[
-                    feature_name
-                ]
-            )
-            trunc_val = (
-                truncated.filter(
-                    (pl.col("date") == cutoff) & (pl.col("ticker") == ticker)
-                )[feature_name]
-            )
+            full_val = full.filter((pl.col("date") == cutoff) & (pl.col("ticker") == ticker))[
+                feature_name
+            ]
+            trunc_val = truncated.filter((pl.col("date") == cutoff) & (pl.col("ticker") == ticker))[
+                feature_name
+            ]
             assert full_val.len() == 1 and trunc_val.len() == 1, (
                 f"Missing row for {ticker} on {cutoff}"
             )
@@ -58,8 +54,7 @@ def test_feature_is_truncation_invariant(feature_name, synthetic_panel):
             if a is None and b is None:
                 continue
             assert a is not None and b is not None, (
-                f"{feature_name}: null mismatch at {cutoff}/{ticker} "
-                f"(full={a}, trunc={b})"
+                f"{feature_name}: null mismatch at {cutoff}/{ticker} (full={a}, trunc={b})"
             )
             assert math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12), (
                 f"{feature_name} leaks: at {cutoff}/{ticker} full={a} truncated={b}"
