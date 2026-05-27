@@ -38,6 +38,12 @@ chronos = [
     "accelerate>=0.30",
     "chronos-forecasting>=1.2",
 ]
+classical = [
+    # Textbook time-series baselines (ARIMA, GARCH). GBM uses only numpy.
+    # Install for: ArimaPerTicker, GarchVolForecaster.
+    "statsmodels>=0.14",
+    "arch>=7.0",
+]
 
 [project.scripts]
 price-model = "price_model.cli:app"
@@ -60,8 +66,10 @@ ignore = ["E501"]  # line length handled by formatter
 
 [tool.ruff.lint.per-file-ignores]
 # Capital X for feature matrix is universal ML convention — keep it.
-"src/price_model/models/*.py" = ["N806"]
+"src/price_model/models/*.py" = ["N806", "RUF002", "RUF003"]
 "tests/test_models.py" = ["N806"]
+# Classical-models docstrings use deliberate Unicode math notation (μ, σ, ≈, √, etc.)
+# Already covered by the models/*.py ignore above for RUF002/RUF003.
 
 [tool.pyright]
 include = ["src", "tests"]

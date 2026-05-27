@@ -9,17 +9,25 @@ from __future__ import annotations
 from price_model.models.base import Model, ModelConfig
 from price_model.models.baseline import LastReturnPredictor, ZeroPredictor
 from price_model.models.boosting import LightGBMModel
+from price_model.models.classical import (
+    ArimaPerTicker,
+    GarchVolForecaster,
+    GbmMaximumLikelihood,
+)
 from price_model.models.foundation import ChronosZeroShot
 
-# ChronosZeroShot module imports cleanly without torch/chronos installed; the
-# import error is deferred to first use (when _ensure_pipeline() runs). So this
-# stays a hard import and the failure mode is "Chronos not installed" at predict
-# time, not at registry-build time.
+# Classical and foundation models import cleanly without their optional deps;
+# import errors are deferred to fit() / predict() time. So the registry hard-binds
+# all classes; the failure mode is "extra not installed" at use time, not import.
 MODEL_REGISTRY: dict[str, type[Model]] = {
     "ZeroPredictor": ZeroPredictor,
     "LastReturnPredictor": LastReturnPredictor,
     "LightGBMModel": LightGBMModel,
     "ChronosZeroShot": ChronosZeroShot,
+    # Classical baselines (need [classical] extras to actually fit)
+    "ArimaPerTicker": ArimaPerTicker,
+    "GarchVolForecaster": GarchVolForecaster,
+    "GbmMaximumLikelihood": GbmMaximumLikelihood,
 }
 
 
@@ -31,7 +39,10 @@ def build_model(class_name: str, config: ModelConfig) -> Model:
 
 __all__ = [
     "MODEL_REGISTRY",
+    "ArimaPerTicker",
     "ChronosZeroShot",
+    "GarchVolForecaster",
+    "GbmMaximumLikelihood",
     "LastReturnPredictor",
     "LightGBMModel",
     "Model",

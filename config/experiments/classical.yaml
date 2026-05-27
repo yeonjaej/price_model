@@ -1,0 +1,56 @@
+# Classical time-series baselines: ARIMA, GARCH, GBM.
+#
+# Per-ticker fits are slow (~1-3 seconds each), so this experiment is sized for
+# tractability rather than maximum statistical power:
+#   - top20_2026_01_01 universe (20 tickers, not the full sp500)
+#   - annual refit (refit_freq_days: 252) instead of monthly
+#
+# Total wall-clock estimate: ~15-30 min depending on hardware. For a deeper
+# backtest, switch universe to sp500 and reduce refit_freq_days, but expect
+# multi-hour runtime.
+#
+# Install dependencies first:
+#   pip install ".[classical]"
+
+experiment_id: classical_v1
+
+data:
+  universe: top20_2026_01_01
+  start: 2017-01-01
+
+features: []                # classical models use only adj_close
+normalize_kind: none
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252      # annual refit
+  embargo_days: 6
+  min_train_days: 504       # ~2y of context
+
+models:
+  - id: zero_v1
+    class: ZeroPredictor
+    params: {}
+
+  - id: arima_classical_v1
+    class: ArimaPerTicker
+    params:
+      order: [1, 0, 1]
+      trend: c
+      min_history: 252
+      horizon_days: 5
+
+  - id: garch_classical_v1
+    class: GarchVolForecaster
+    params:
+      p: 1
+      q: 1
+      mean: Zero
+      min_history: 252
+      horizon_days: 5
+
+  - id: gbm_classical_v1
+    class: GbmMaximumLikelihood
+    params:
+      min_history: 252
+      horizon_days: 5

@@ -2,16 +2,29 @@
 
 A "universe" here is just a list of tickers. v0 ships two static lists:
 
-- sp500: ~160 large US names, used for training (cross-sectional learning needs breadth)
-- top20_2026_01_01: deployment-time prediction universe (the user's focus)
+- sp500: a curated 156-name large-cap subset of the actual S&P 500 (NOT the full
+  ~503-name index). Roughly the top third by market cap. Used for training because
+  cross-sectional learning needs breadth, but `breadth ≈ 156` leaves Sharpe on the
+  table relative to the full index — see README "Known v0 limitations".
+- top20_2026_01_01: deployment-time prediction universe (the user's focus).
 
 Loading from text files (one ticker per line) keeps the lists trivially swappable —
 later, a PIT-aware loader can return different memberships per date by walking
 Wikipedia's S&P 500 history.
 
-Survivorship-bias caveat: the static lists are TODAY'S membership. Backtests on long
-windows therefore overstate performance (we never see companies that fell out). This
-is acknowledged and tracked as a v2 follow-up.
+Two known shortcuts:
+
+1. **Subset, not full index.** Expanding to all ~503 names roughly doubles the
+   trading-relevant Sharpe at unchanged signal quality (Fundamental Law of Active
+   Management: IR ~= IC * sqrt(breadth)). Cost: more manual sector mapping or a scrape,
+   more yfinance failures to handle, more heterogeneous cross-section.
+
+2. **Static membership = survivorship bias.** Today's list over-represents the names
+   that survived to today; companies that fell out aren't present. All long-window
+   backtests are upward-biased. Fix: PIT membership reconstruction (Wikipedia
+   index-change history, or a paid PIT data provider).
+
+Both are tracked TODOs.
 """
 
 from __future__ import annotations

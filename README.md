@@ -8,7 +8,9 @@ walk-forward backtesting, and surfaces predictions in a Streamlit dashboard.
 
 See conversation log / docs for the full design rationale. Short version:
 
-- **Universe**: train on S&P 500 (static list for v0), predict for any subset at deploy time.
+- **Universe**: trains on a curated 156-name large-cap subset of the S&P 500 (not the full
+  ~500-name index — see "Known v0 limitations" below). Predicts for any subset at deploy
+  time; the default deployment universe is the top 20 by market cap as of 2026-01-01.
 - **Target**: 5-day forward excess return (return minus universe mean) — strips out the market move.
 - **Features**: stock-agnostic, cross-sectionally normalized within each date — so AMD's features
   on 2026-05-26 are comparable to AAPL's on 2020-03-15 and to any other stock on any other day.
@@ -81,8 +83,21 @@ you suspect a breakthrough.
 
 ## Known v0 limitations (tracked as TODOs)
 
-- Static S&P 500 list → survivorship bias in backtests. Already dropped FISV (renamed)
-  and WBA (taken private 2025); PIT membership reconstruction is the proper fix.
+- **Universe is 156 large-caps, not the full S&P 500.** `src/price_model/data/universes/sp500.txt`
+  is a hand-curated subset of the most liquid large-cap names — roughly the top third of the
+  actual index by market cap. The actual S&P 500 has ~503 constituents. The Fundamental Law
+  of Active Management gives `IR ≈ IC × √breadth`; tripling the universe to the full index
+  would roughly double the trading-relevant Sharpe at unchanged signal quality. Worth doing
+  once the project warrants the operational complexity (more yfinance failures, manual sector
+  mappings or a scrape, more heterogeneous cross-section).
+- **Static universe membership → survivorship bias** in backtests. Today's "top-156" list
+  over-represents historical winners; companies that fell out of the index over the test
+  window aren't present. Already dropped FISV (renamed), WBA (taken private 2025),
+  FI (Fiserv — Yahoo Finance API consistently 404s on this symbol; symptom of post-rename
+  quote/historical endpoint disagreement), and MMC (transient yfinance failures). Proper fix
+  is point-in-time membership reconstruction from Wikipedia's index-change history or a paid
+  PIT data provider. Until then, all long-window backtests are upward-biased by an unknown
+  but non-zero amount.
 - yfinance fundamentals are sparse and not strictly point-in-time. Upgrade to Sharadar
   when fundamentals matter.
 - No transaction-cost model yet — backtest Sharpes are gross, not net.

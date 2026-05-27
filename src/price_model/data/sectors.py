@@ -82,7 +82,6 @@ SECTOR_MAP: dict[str, str] = {
     "MA": "Financials",
     "MCO": "Financials",
     "MET": "Financials",
-    "MMC": "Financials",
     "MS": "Financials",
     "PGR": "Financials",
     "PNC": "Financials",
@@ -153,7 +152,6 @@ SECTOR_MAP: dict[str, str] = {
     "CDNS": "Information Technology",
     "CRM": "Information Technology",
     "CSCO": "Information Technology",
-    "FI": "Information Technology",  # Fiserv (renamed from FISV in 2024)
     "IBM": "Information Technology",
     "INTC": "Information Technology",
     "INTU": "Information Technology",
