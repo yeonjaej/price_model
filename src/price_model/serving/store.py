@@ -19,7 +19,26 @@ from pathlib import Path
 import duckdb
 import polars as pl
 
-DEFAULT_PATH = Path("artifacts/predictions/predictions.duckdb")
+
+def _find_project_root() -> Path:
+    """Walk up from this file looking for pyproject.toml.
+
+    When the package is installed editable (the normal dev case), `__file__`
+    resolves into the source tree and we find the real project root. When the
+    package is installed non-editable into site-packages there's no
+    pyproject.toml above it, so we fall back to CWD.
+
+    This eliminates the "calling PredictionStore() from notebooks/ creates a
+    fresh empty store in the wrong directory" footgun.
+    """
+    here = Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    return Path.cwd()
+
+
+DEFAULT_PATH = _find_project_root() / "artifacts" / "predictions" / "predictions.duckdb"
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS predictions (
