@@ -123,9 +123,12 @@ def run_experiment(
             console.print("[red]No predictions produced")
             return
 
-        joined = pl.concat(all_preds_by_model)
+        # Models may emit different schemas (some carry pred_lower/pred_upper for
+        # interval forecasts, others don't). Select common columns before concat —
+        # the comparison table only uses (date, ticker, prediction, model_id).
+        common_cols = ["date", "ticker", "prediction", "model_id"]
+        joined = pl.concat([df.select(common_cols) for df in all_preds_by_model])
         eval_df = join_with_realized(joined, matrix)
-        eval_df = eval_df.rename({"date": "date"})  # already named date; no-op for clarity
         summary = compare_models(eval_df, horizon_days=cfg["target_horizon"])
 
         console.rule("[bold green]Model comparison")
