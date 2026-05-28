@@ -71,9 +71,7 @@ wide = wide.with_columns(
 )
 
 st.subheader("Consensus vs. disagreement")
-st.caption(
-    "Each point is one ticker on the latest prediction date. Hover for the symbol."
-)
+st.caption("Each point is one ticker on the latest prediction date. Hover for the symbol.")
 fig = px.scatter(
     wide.to_pandas(),
     x="consensus",
@@ -102,7 +100,10 @@ if xs and ys:
     ]
     for txt, ax, ay, color in annotations:
         fig.add_annotation(
-            x=ax, y=ay, text=txt, showarrow=False,
+            x=ax,
+            y=ay,
+            text=txt,
+            showarrow=False,
             font={"size": 11, "color": color},
         )
 st.plotly_chart(fig, width="stretch")

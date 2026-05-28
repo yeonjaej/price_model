@@ -148,9 +148,7 @@ def _parse_components_table(tables: list[pd.DataFrame]) -> pl.DataFrame:
     ticker_col = col_map.get("symbol") or col_map.get("ticker")
     date_col = col_map.get("date added") or col_map.get("date first added")
     if ticker_col is None or date_col is None:
-        raise ValueError(
-            f"Components table missing expected columns. Got: {list(df.columns)}"
-        )
+        raise ValueError(f"Components table missing expected columns. Got: {list(df.columns)}")
 
     rows: list[dict] = []
     for _, row in df.iterrows():
@@ -183,7 +181,9 @@ def _parse_changes_table(tables: list[pd.DataFrame]) -> pl.DataFrame:
     df = tables[1].copy()
     # Flatten MultiIndex columns if present
     if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [" ".join(str(c) for c in tup if str(c) != "nan").strip() for tup in df.columns]
+        df.columns = [
+            " ".join(str(c) for c in tup if str(c) != "nan").strip() for tup in df.columns
+        ]
 
     # Find the relevant columns by lowercase match
     norm = {c.lower().strip(): c for c in df.columns.astype(str)}
@@ -197,9 +197,7 @@ def _parse_changes_table(tables: list[pd.DataFrame]) -> pl.DataFrame:
         None,
     )
     if not (date_col and (add_tk_col or rem_tk_col)):
-        raise ValueError(
-            f"Changes table missing required columns. Available: {list(df.columns)}"
-        )
+        raise ValueError(f"Changes table missing required columns. Available: {list(df.columns)}")
 
     rows: list[dict] = []
     for _, row in df.iterrows():

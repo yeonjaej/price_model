@@ -34,88 +34,88 @@ from __future__ import annotations
 
 TICKER_ALIASES: dict[str, str] = {
     # Bank / financial
-    "BHI":  "BKR",       # Baker Hughes (GE) → Baker Hughes BKR (Sep 2019)
-    "ETFC": "MS",        # E*TRADE → Morgan Stanley (Oct 2020) — unified under MS
-    "FLT":  "CPAY",      # FleetCor → Corpay (Apr 2024)
-    "FRC":  "JPM",       # First Republic → JPMorgan (May 2023 — receivership)
-    "LUK":  "JEF",       # Leucadia → Jefferies Financial Group (Mar 2018)
-    "PBCT": "MTB",       # People's United → M&T Bank (Apr 2022)
+    "BHI": "BKR",  # Baker Hughes (GE) → Baker Hughes BKR (Sep 2019)
+    "ETFC": "MS",  # E*TRADE → Morgan Stanley (Oct 2020) — unified under MS
+    "FLT": "CPAY",  # FleetCor → Corpay (Apr 2024)
+    "FRC": "JPM",  # First Republic → JPMorgan (May 2023 — receivership)
+    "LUK": "JEF",  # Leucadia → Jefferies Financial Group (Mar 2018)
+    "PBCT": "MTB",  # People's United → M&T Bank (Apr 2022)
     # Consumer / retail
-    "ADS":  "BFH",       # Alliance Data → Bread Financial (Mar 2022)
-    "DPS":  "KDP",       # Dr Pepper Snapple → Keurig Dr Pepper (Jul 2018)
-    "GPS":  "GAP",       # Gap Inc → renamed GAP (Feb 2024)
-    "KORS": "CPRI",      # Michael Kors → Capri Holdings (Dec 2018)
+    "ADS": "BFH",  # Alliance Data → Bread Financial (Mar 2022)
+    "DPS": "KDP",  # Dr Pepper Snapple → Keurig Dr Pepper (Jul 2018)
+    "GPS": "GAP",  # Gap Inc → renamed GAP (Feb 2024)
+    "KORS": "CPRI",  # Michael Kors → Capri Holdings (Dec 2018)
     # K (Kellanova) keeps its ticker after the KLG split — no alias needed.
-    "RAI":  "BTI",       # Reynolds American → BAT (Jul 2017) — ADR
-    "TIF":  "MC.PA",     # Tiffany → LVMH (Jan 2021) — French ADR, may not resolve
-    "WFM":  "AMZN",      # Whole Foods → Amazon (Aug 2017) — history may not unify
+    "RAI": "BTI",  # Reynolds American → BAT (Jul 2017) — ADR
+    "TIF": "MC.PA",  # Tiffany → LVMH (Jan 2021) — French ADR, may not resolve
+    "WFM": "AMZN",  # Whole Foods → Amazon (Aug 2017) — history may not unify
     # Defense / aerospace
-    "HRS":  "LHX",       # Harris → L3Harris (Jun 2019)
-    "LLL":  "LHX",       # L3 → L3Harris (Jun 2019)
-    "RTN":  "RTX",       # Raytheon → RTX Corp (Apr 2020)
+    "HRS": "LHX",  # Harris → L3Harris (Jun 2019)
+    "LLL": "LHX",  # L3 → L3Harris (Jun 2019)
+    "RTN": "RTX",  # Raytheon → RTX Corp (Apr 2020)
     # Energy
-    "ANDV": "MPC",       # Andeavor → Marathon Petroleum (Oct 2018) (was TSO)
-    "COG":  "CTRA",      # Cabot Oil → Coterra (Oct 2021)
-    "CXO":  "COP",       # Concho Resources → ConocoPhillips (Jan 2021)
-    "HFC":  "DINO",      # HollyFrontier → HF Sinclair (Mar 2022)
-    "MRO":  "COP",       # Marathon Oil → ConocoPhillips (Nov 2024)
-    "NBL":  "CVX",       # Noble Energy → Chevron (Oct 2020)
-    "PXD":  "XOM",       # Pioneer → ExxonMobil (May 2024)
-    "SWN":  "EXE",       # Southwestern Energy → Expand Energy (Oct 2024)
-    "TSO":  "MPC",       # Tesoro → Andeavor → Marathon Petroleum (chain)
-    "XEC":  "CTRA",      # Cimarex → Coterra (Oct 2021)
+    "ANDV": "MPC",  # Andeavor → Marathon Petroleum (Oct 2018) (was TSO)
+    "COG": "CTRA",  # Cabot Oil → Coterra (Oct 2021)
+    "CXO": "COP",  # Concho Resources → ConocoPhillips (Jan 2021)
+    "HFC": "DINO",  # HollyFrontier → HF Sinclair (Mar 2022)
+    "MRO": "COP",  # Marathon Oil → ConocoPhillips (Nov 2024)
+    "NBL": "CVX",  # Noble Energy → Chevron (Oct 2020)
+    "PXD": "XOM",  # Pioneer → ExxonMobil (May 2024)
+    "SWN": "EXE",  # Southwestern Energy → Expand Energy (Oct 2024)
+    "TSO": "MPC",  # Tesoro → Andeavor → Marathon Petroleum (chain)
+    "XEC": "CTRA",  # Cimarex → Coterra (Oct 2021)
     # Healthcare
-    "ABMD": "JNJ",       # Abiomed → Johnson & Johnson (Dec 2022)
-    "AGN":  "ABBV",      # Allergan → AbbVie (May 2020)
-    "ALXN": "AZN",       # Alexion → AstraZeneca (Jul 2021) — ADR
-    "BCR":  "BDX",       # CR Bard → Becton Dickinson (Dec 2017)
-    "CELG": "BMY",       # Celgene → Bristol-Myers Squibb (Nov 2019)
-    "CERN": "ORCL",      # Cerner → Oracle (Jun 2022)
-    "MJN":  "RBGLY",     # Mead Johnson → Reckitt (Jun 2017)
-    "RHT":  "IBM",       # Red Hat → IBM (Jul 2019)
-    "STJ":  "ABT",       # St Jude Medical → Abbott (Jan 2017)
-    "VAR":  "SIE.DE",    # Varian → Siemens Healthineers (Apr 2021) — likely fails
-    "WCG":  "CNC",       # WellCare → Centene (Jan 2020)
-    "WLP":  "ELV",       # WellPoint → Anthem → Elevance Health (Jun 2022)
+    "ABMD": "JNJ",  # Abiomed → Johnson & Johnson (Dec 2022)
+    "AGN": "ABBV",  # Allergan → AbbVie (May 2020)
+    "ALXN": "AZN",  # Alexion → AstraZeneca (Jul 2021) — ADR
+    "BCR": "BDX",  # CR Bard → Becton Dickinson (Dec 2017)
+    "CELG": "BMY",  # Celgene → Bristol-Myers Squibb (Nov 2019)
+    "CERN": "ORCL",  # Cerner → Oracle (Jun 2022)
+    "MJN": "RBGLY",  # Mead Johnson → Reckitt (Jun 2017)
+    "RHT": "IBM",  # Red Hat → IBM (Jul 2019)
+    "STJ": "ABT",  # St Jude Medical → Abbott (Jan 2017)
+    "VAR": "SIE.DE",  # Varian → Siemens Healthineers (Apr 2021) — likely fails
+    "WCG": "CNC",  # WellCare → Centene (Jan 2020)
+    "WLP": "ELV",  # WellPoint → Anthem → Elevance Health (Jun 2022)
     # Industrials / Materials
-    "ARNC": "HWM",       # Arconic → Howmet Aerospace (Apr 2020) — split, HWM remains
-    "DLPH": "APTV",      # Delphi Automotive → Aptiv (Dec 2017)
-    "DWDP": "DD",        # DowDuPont → DuPont (after 2019 split into DD/DOW/CTVA)
-    "FBHS": "FBIN",      # Fortune Brands → Fortune Brands Innovations (Dec 2022)
-    "FLIR": "TDY",       # FLIR → Teledyne (May 2021)
-    "JEC":  "J",         # Jacobs Engineering → Jacobs Solutions (Feb 2022)
-    "JOYG": "KMTUY",     # Joy Global → Komatsu (Apr 2017) — ADR
-    "MON":  "BAYRY",     # Monsanto → Bayer (Jun 2018) — ADR
-    "RE":   "EG",        # Everest Re → Everest Group (Jan 2023)
-    "SRCL": "WM",        # Stericycle → Waste Management (Nov 2024)
-    "WYN":  "WH",        # Wyndham Worldwide → Wyndham Hotels (May 2018; Destinations is WYND)
-    "XL":   "AXAHY",     # XL Group → AXA (Sep 2018) — ADR
+    "ARNC": "HWM",  # Arconic → Howmet Aerospace (Apr 2020) — split, HWM remains
+    "DLPH": "APTV",  # Delphi Automotive → Aptiv (Dec 2017)
+    "DWDP": "DD",  # DowDuPont → DuPont (after 2019 split into DD/DOW/CTVA)
+    "FBHS": "FBIN",  # Fortune Brands → Fortune Brands Innovations (Dec 2022)
+    "FLIR": "TDY",  # FLIR → Teledyne (May 2021)
+    "JEC": "J",  # Jacobs Engineering → Jacobs Solutions (Feb 2022)
+    "JOYG": "KMTUY",  # Joy Global → Komatsu (Apr 2017) — ADR
+    "MON": "BAYRY",  # Monsanto → Bayer (Jun 2018) — ADR
+    "RE": "EG",  # Everest Re → Everest Group (Jan 2023)
+    "SRCL": "WM",  # Stericycle → Waste Management (Nov 2024)
+    "WYN": "WH",  # Wyndham Worldwide → Wyndham Hotels (May 2018; Destinations is WYND)
+    "XL": "AXAHY",  # XL Group → AXA (Sep 2018) — ADR
     # Media / telecom
-    "CDAY": "DAY",       # Ceridian → Dayforce (Feb 2024)
-    "DISCA": "WBD",      # Discovery Communications A → Warner Bros Discovery (Apr 2022)
-    "DISCK": "WBD",      # Discovery Communications K → Warner Bros Discovery (Apr 2022)
-    "DISH":  "SATS",     # DISH Network → EchoStar (Dec 2023)
-    "NLSN":  "NLSN",     # Nielsen — went private 2022 (keep mapped; will hit drop list)
-    "SNI":   "WBD",      # Scripps Networks → Discovery → WBD
-    "TWTR":  "TWTR",     # Twitter — private 2022 (keep mapped; will hit drop list)
-    "VIAB":  "PARA",     # Viacom → ViacomCBS → Paramount (Feb 2022)
-    "WLTW":  "WTW",      # Willis Towers Watson → WTW (Mar 2021)
-    "YHOO":  "AABA",     # Yahoo → Altaba (Jun 2017); AABA dissolved 2019 — likely fails
+    "CDAY": "DAY",  # Ceridian → Dayforce (Feb 2024)
+    "DISCA": "WBD",  # Discovery Communications A → Warner Bros Discovery (Apr 2022)
+    "DISCK": "WBD",  # Discovery Communications K → Warner Bros Discovery (Apr 2022)
+    "DISH": "SATS",  # DISH Network → EchoStar (Dec 2023)
+    "NLSN": "NLSN",  # Nielsen — went private 2022 (keep mapped; will hit drop list)
+    "SNI": "WBD",  # Scripps Networks → Discovery → WBD
+    "TWTR": "TWTR",  # Twitter — private 2022 (keep mapped; will hit drop list)
+    "VIAB": "PARA",  # Viacom → ViacomCBS → Paramount (Feb 2022)
+    "WLTW": "WTW",  # Willis Towers Watson → WTW (Mar 2021)
+    "YHOO": "AABA",  # Yahoo → Altaba (Jun 2017); AABA dissolved 2019 — likely fails
     # Tech / semiconductors
-    "ATVI":  "MSFT",     # Activision Blizzard → Microsoft (Oct 2023)
-    "CTXS":  "CTXS",     # Citrix — private 2022 (no successor; will hit drop list)
-    "FB":    "META",     # Facebook → Meta Platforms (Jun 2022)
-    "FISV":  "FI",       # Fiserv → Fiserv Inc (FI) — ticker change
-    "LLTC":  "ADI",      # Linear Technology → Analog Devices (Mar 2017)
-    "LVLT":  "LUMN",     # Level 3 → CenturyLink → Lumen (Nov 2017)
-    "MXIM":  "ADI",      # Maxim Integrated → Analog Devices (Aug 2021)
-    "TSS":   "GPN",      # TSYS → Global Payments (Sep 2019)
-    "XLNX":  "AMD",      # Xilinx → AMD (Feb 2022)
+    "ATVI": "MSFT",  # Activision Blizzard → Microsoft (Oct 2023)
+    "CTXS": "CTXS",  # Citrix — private 2022 (no successor; will hit drop list)
+    "FB": "META",  # Facebook → Meta Platforms (Jun 2022)
+    "FISV": "FI",  # Fiserv → Fiserv Inc (FI) — ticker change
+    "LLTC": "ADI",  # Linear Technology → Analog Devices (Mar 2017)
+    "LVLT": "LUMN",  # Level 3 → CenturyLink → Lumen (Nov 2017)
+    "MXIM": "ADI",  # Maxim Integrated → Analog Devices (Aug 2021)
+    "TSS": "GPN",  # TSYS → Global Payments (Sep 2019)
+    "XLNX": "AMD",  # Xilinx → AMD (Feb 2022)
     # Other
-    "GGP":   "BPY",      # General Growth Properties → Brookfield Property (Aug 2018)
-    "DRE":   "PLD",      # Duke Realty → Prologis (Oct 2022)
-    "KSU":   "CP",       # Kansas City Southern → Canadian Pacific (Dec 2021)
-    "BHGE":  "BKR",      # Baker Hughes (transitional ticker) → BKR
+    "GGP": "BPY",  # General Growth Properties → Brookfield Property (Aug 2018)
+    "DRE": "PLD",  # Duke Realty → Prologis (Oct 2022)
+    "KSU": "CP",  # Kansas City Southern → Canadian Pacific (Dec 2021)
+    "BHGE": "BKR",  # Baker Hughes (transitional ticker) → BKR
 }
 
 
@@ -129,63 +129,56 @@ TICKER_ALIASES: dict[str, str] = {
 
 TICKER_DROP_LIST: set[str] = {
     # 2023 bank failures — total writeoff in yfinance
-    "SIVB",   # Silicon Valley Bank, FDIC receivership (Mar 2023)
-    "FRC",    # First Republic Bank, FDIC receivership (May 2023)
-    "SBNY",   # Signature Bank, FDIC receivership (Mar 2023)
-
+    "SIVB",  # Silicon Valley Bank, FDIC receivership (Mar 2023)
+    "FRC",  # First Republic Bank, FDIC receivership (May 2023)
+    "SBNY",  # Signature Bank, FDIC receivership (Mar 2023)
     # Other bankruptcies / failed companies
-    "ENDP",   # Endo International — Chapter 11 (Aug 2022)
-    "FSR",    # Fisker Inc — Chapter 11 (Jun 2024)
-    "FTR",    # Frontier Communications — bankruptcy (Apr 2020), now FYBR
-    "MNK",    # Mallinckrodt — Chapter 11 (twice)
-    "CHK",    # Chesapeake Energy — Chapter 11 (Jun 2020); re-listed but yfinance returns no usable data
-
+    "ENDP",  # Endo International — Chapter 11 (Aug 2022)
+    "FSR",  # Fisker Inc — Chapter 11 (Jun 2024)
+    "FTR",  # Frontier Communications — bankruptcy (Apr 2020), now FYBR
+    "MNK",  # Mallinckrodt — Chapter 11 (twice)
+    "CHK",  # Chesapeake Energy — Chapter 11 (Jun 2020); re-listed but yfinance returns no usable data
     # Went private — no current ticker
-    "CTXS",   # Citrix — taken private by Vista/Elliott (Sep 2022)
-    "NLSN",   # Nielsen — taken private by Elliott (Oct 2022)
-    "TWTR",   # Twitter — taken private by Musk (Oct 2022)
-    "JWN",    # Nordstrom — taken private (2025)
-    "PDCO",   # Patterson Companies — taken private (2025)
-
+    "CTXS",  # Citrix — taken private by Vista/Elliott (Sep 2022)
+    "NLSN",  # Nielsen — taken private by Elliott (Oct 2022)
+    "TWTR",  # Twitter — taken private by Musk (Oct 2022)
+    "JWN",  # Nordstrom — taken private (2025)
+    "PDCO",  # Patterson Companies — taken private (2025)
     # Acquired, no usable unified yfinance history under acquirer
-    "YHOO",   # Yahoo → Altaba (2017) → dissolved
-    "WFM",    # Whole Foods → Amazon — no AMZN history extension for WFM
-    "TIF",    # Tiffany → LVMH (French) — no usable continuation in yf
-    "VAR",    # Varian → Siemens Healthineers (Germany) — no usable continuation
-
+    "YHOO",  # Yahoo → Altaba (2017) → dissolved
+    "WFM",  # Whole Foods → Amazon — no AMZN history extension for WFM
+    "TIF",  # Tiffany → LVMH (French) — no usable continuation in yf
+    "VAR",  # Varian → Siemens Healthineers (Germany) — no usable continuation
     # Known yfinance issues we already encountered (transient or persistent)
-    "CMA",    # Comerica — yfinance returns data sometimes; keep here for now
-    "WBA",    # Walgreens Boots — yfinance gaps (and being taken private 2025)
-    "MMC",    # Marsh McLennan — was already on this list from prior runs
-    "CCR",    # Country Code REIT or similar — never identified, persistent failure
-    "DFS",    # Discover Financial — temp issue?  (re-evaluate after COF merger)
-
+    "CMA",  # Comerica — yfinance returns data sometimes; keep here for now
+    "WBA",  # Walgreens Boots — yfinance gaps (and being taken private 2025)
+    "MMC",  # Marsh McLennan — was already on this list from prior runs
+    "CCR",  # Country Code REIT or similar — never identified, persistent failure
+    "DFS",  # Discover Financial — temp issue?  (re-evaluate after COF merger)
     # Single-letter / short tickers yfinance can't parse cleanly.
     # Empirically these fail in both directions (as universe input AND as alias
     # targets). Likely a yfinance symbol-parser ambiguity with currencies /
     # commodities. Keep them out until/unless we route through a different feed.
-    "K",      # Kellanova — alive but unfetchable in yfinance
-    "FI",     # Fiserv (FISV renamed) — alive but unfetchable
-    "DAY",    # Dayforce (CDAY renamed Feb 2024) — alive but unfetchable
-
+    "K",  # Kellanova — alive but unfetchable in yfinance
+    "FI",  # Fiserv (FISV renamed) — alive but unfetchable
+    "DAY",  # Dayforce (CDAY renamed Feb 2024) — alive but unfetchable
     # Aliases that turned out to point at also-dead tickers — putting them on
     # the drop list closes the loop so resolve_ticker correctly returns None
     # for the upstream symbol too.
-    "BPY",    # Brookfield Property Partners — went private (Jul 2021). GGP → BPY chain dead.
-    "PARA",   # Paramount — renamed PSKY after Skydance merger (Aug 2025). VIAB → PARA dead.
-    "AABA",   # Altaba (Yahoo successor) — dissolved (Oct 2019). YHOO → AABA dead.
-    "SIE.DE", # Siemens Healthineers German listing — yfinance can't fetch German tickers.
-
+    "BPY",  # Brookfield Property Partners — went private (Jul 2021). GGP → BPY chain dead.
+    "PARA",  # Paramount — renamed PSKY after Skydance merger (Aug 2025). VIAB → PARA dead.
+    "AABA",  # Altaba (Yahoo successor) — dissolved (Oct 2019). YHOO → AABA dead.
+    "SIE.DE",  # Siemens Healthineers German listing — yfinance can't fetch German tickers.
     # Tickers we don't have a clear alias for (audit candidates)
-    "ANSS",   # Ansys — Synopsys merger completed Jul 2025; unsure of yf state
-    "DNB",    # Dun & Bradstreet — should work; investigate next refresh
-    "FL",     # Foot Locker — DKS acquisition pending; transient
-    "HBI",    # Hanesbrands — should work; investigate
-    "HES",    # Hess — CVX merger litigation; transient
-    "IPG",    # Interpublic — OMC merger pending; transient
-    "JNPR",   # Juniper — HPE acquisition close pending
-    "TGNA",   # Tegna — should work; investigate
-    "CTLT",   # Catalent — Novo Holdings acquisition (Dec 2024)
+    "ANSS",  # Ansys — Synopsys merger completed Jul 2025; unsure of yf state
+    "DNB",  # Dun & Bradstreet — should work; investigate next refresh
+    "FL",  # Foot Locker — DKS acquisition pending; transient
+    "HBI",  # Hanesbrands — should work; investigate
+    "HES",  # Hess — CVX merger litigation; transient
+    "IPG",  # Interpublic — OMC merger pending; transient
+    "JNPR",  # Juniper — HPE acquisition close pending
+    "TGNA",  # Tegna — should work; investigate
+    "CTLT",  # Catalent — Novo Holdings acquisition (Dec 2024)
 }
 
 
@@ -197,7 +190,7 @@ TICKER_DROP_LIST: set[str] = {
 
 SYMBOL_NORMALIZATION: dict[str, str] = {
     "BRK.B": "BRK-B",
-    "BF.B":  "BF-B",
+    "BF.B": "BF-B",
 }
 
 

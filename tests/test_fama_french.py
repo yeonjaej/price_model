@@ -208,22 +208,26 @@ def test_smb_beta_x_smb_20d_sign_flips_with_regime(patched_kf):
     spread_out = get_feature("smb_beta_x_smb_20d").compute(panel.sort(["ticker", "date"]))
 
     # Join the two on (date, ticker) so we can compare per row
-    joined = smb_beta_out.select("date", "ticker", "smb_beta_60").join(
-        spread_out.select("date", "ticker", "smb_beta_x_smb_20d"),
-        on=["date", "ticker"],
-    ).drop_nulls()
+    joined = (
+        smb_beta_out.select("date", "ticker", "smb_beta_60")
+        .join(
+            spread_out.select("date", "ticker", "smb_beta_x_smb_20d"),
+            on=["date", "ticker"],
+        )
+        .drop_nulls()
+    )
 
     # Use the synthetic KF feed directly to know each date's 20-day SMB cumulative
-    kf = patched_kf.select("date", "SMB").sort("date").with_columns(
-        pl.col("SMB").rolling_sum(window_size=20).alias("smb_20d")
+    kf = (
+        patched_kf.select("date", "SMB")
+        .sort("date")
+        .with_columns(pl.col("SMB").rolling_sum(window_size=20).alias("smb_20d"))
     )
     joined = joined.join(kf.select("date", "smb_20d"), on="date").drop_nulls()
 
     # sign(beta) and sign(spread / smb_20d) should agree (since spread = beta * smb_20d)
     # Just check the product (beta * smb_20d) ≈ spread within float tolerance
-    diff = (
-        joined["smb_beta_60"] * joined["smb_20d"] - joined["smb_beta_x_smb_20d"]
-    ).abs().max()
+    diff = (joined["smb_beta_60"] * joined["smb_20d"] - joined["smb_beta_x_smb_20d"]).abs().max()
     assert diff < 1e-9
 
 

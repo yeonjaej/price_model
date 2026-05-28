@@ -296,9 +296,7 @@ def test_filter_panel_to_pit_requires_date_and_ticker(patched_membership):
 
 
 def test_filter_panel_to_pit_handles_empty_panel(patched_membership):
-    empty = pl.DataFrame(
-        schema={"date": pl.Date, "ticker": pl.Utf8, "adj_close": pl.Float64}
-    )
+    empty = pl.DataFrame(schema={"date": pl.Date, "ticker": pl.Utf8, "adj_close": pl.Float64})
     out = membership.filter_panel_to_pit(empty)
     assert out.height == 0
 

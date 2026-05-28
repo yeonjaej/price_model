@@ -106,9 +106,7 @@ class _RollingBetaBase(Feature):
 
     def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
         panel = _attach_factor_returns(panel, factors=[self.factor])
-        out = panel.with_columns(
-            _rolling_beta("_ret", self.factor, self.window).alias(self.name)
-        )
+        out = panel.with_columns(_rolling_beta("_ret", self.factor, self.window).alias(self.name))
         return out.drop(["_ret", self.factor])
 
 
@@ -244,9 +242,7 @@ class _BetaRegimeInteraction(Feature):
             beta.alias("_beta_tmp"),
             regime.alias("_regime_tmp"),
         )
-        out = panel.with_columns(
-            (pl.col("_beta_tmp") * pl.col("_regime_tmp")).alias(self.name)
-        )
+        out = panel.with_columns((pl.col("_beta_tmp") * pl.col("_regime_tmp")).alias(self.name))
         return out.drop(["_ret", self.factor, "_beta_tmp", "_regime_tmp"])
 
 

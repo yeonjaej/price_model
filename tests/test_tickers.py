@@ -109,14 +109,16 @@ def test_drop_list_no_overlap_with_alias_targets():
     """
     intentional_targets = {
         # Self-loop documentation markers
-        "TWTR", "NLSN", "CTXS",
+        "TWTR",
+        "NLSN",
+        "CTXS",
         # Chains that end in dead targets
-        "BPY",     # GGP → BPY (went private)
-        "PARA",    # VIAB → PARA (renamed to PSKY)
-        "AABA",    # YHOO → AABA (dissolved)
+        "BPY",  # GGP → BPY (went private)
+        "PARA",  # VIAB → PARA (renamed to PSKY)
+        "AABA",  # YHOO → AABA (dissolved)
         "SIE.DE",  # VAR → SIE.DE (German ticker, yf can't fetch)
-        "FI",      # FISV → FI (yfinance short-ticker issue)
-        "DAY",     # CDAY → DAY (yfinance short-ticker issue)
+        "FI",  # FISV → FI (yfinance short-ticker issue)
+        "DAY",  # CDAY → DAY (yfinance short-ticker issue)
     }
     actual = {orig: tgt for orig, tgt in TICKER_ALIASES.items() if tgt in TICKER_DROP_LIST}
     unexpected = {orig for orig, tgt in actual.items() if tgt not in intentional_targets}

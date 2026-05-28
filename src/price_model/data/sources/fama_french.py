@@ -177,11 +177,7 @@ def fetch(
     df = _parse_kf_csv(text)
 
     if start is not None:
-        start_d = (
-            start
-            if isinstance(start, date)
-            else datetime.fromisoformat(str(start)).date()
-        )
+        start_d = start if isinstance(start, date) else datetime.fromisoformat(str(start)).date()
         df = df.filter(pl.col("date") >= pl.lit(start_d).cast(pl.Date))
     if end is not None:
         end_d = end if isinstance(end, date) else datetime.fromisoformat(str(end)).date()

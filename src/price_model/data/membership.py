@@ -47,10 +47,9 @@ def members_on_date(d: date) -> set[str]:
     """
     df = _load_membership_table()
     return set(
-        df.filter(
-            (pl.col("added") <= d)
-            & (pl.col("removed").is_null() | (pl.col("removed") > d))
-        )["ticker"].to_list()
+        df.filter((pl.col("added") <= d) & (pl.col("removed").is_null() | (pl.col("removed") > d)))[
+            "ticker"
+        ].to_list()
     )
 
 
@@ -75,8 +74,7 @@ def members_during_window(start: date, end: date) -> set[str]:
     df = _load_membership_table()
     return set(
         df.filter(
-            (pl.col("added") <= end)
-            & (pl.col("removed").is_null() | (pl.col("removed") > start))
+            (pl.col("added") <= end) & (pl.col("removed").is_null() | (pl.col("removed") > start))
         )["ticker"].to_list()
     )
 

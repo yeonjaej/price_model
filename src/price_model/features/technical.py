@@ -167,9 +167,7 @@ class Distance52WeekHigh(Feature):
         # length 252 on the lagged series gives "trailing 52-week high
         # excluding today".
         trailing_max = c.shift(1).rolling_max(window_size=252).over("ticker")
-        return panel.with_columns(
-            (c.log() - trailing_max.log()).alias(self.name)
-        )
+        return panel.with_columns((c.log() - trailing_max.log()).alias(self.name))
 
 
 @register
@@ -193,6 +191,4 @@ class Return1d(Feature):
 
     def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
         c = pl.col("adj_close")
-        return panel.with_columns(
-            (c.log() - c.log().shift(1)).over("ticker").alias(self.name)
-        )
+        return panel.with_columns((c.log() - c.log().shift(1)).over("ticker").alias(self.name))
