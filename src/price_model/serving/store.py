@@ -13,7 +13,7 @@ Why DuckDB:
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
@@ -109,7 +109,9 @@ class PredictionStore:
         """
         if predictions.height == 0:
             return 0
-        generated_at = generated_at or datetime.utcnow()
+        # `datetime.utcnow()` is deprecated in Python 3.12+; use timezone-aware
+        # UTC then drop the tz for DuckDB's TIMESTAMP column (which is naive).
+        generated_at = generated_at or datetime.now(UTC).replace(tzinfo=None)
 
         df = predictions.rename({"date": "prediction_date"})
         # Compute target_date = prediction_date + horizon_days
