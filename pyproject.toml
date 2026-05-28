@@ -20,6 +20,7 @@ dependencies = [
     "rich>=13.7",
     "streamlit>=1.36",
     "plotly>=5.22",
+    "lxml>=5.0",            # required by pandas.read_html for the Wikipedia membership parser
 ]
 
 [project.optional-dependencies]
