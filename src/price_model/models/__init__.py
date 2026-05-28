@@ -11,6 +11,7 @@ from price_model.models.baseline import LastReturnPredictor, ZeroPredictor
 from price_model.models.boosting import LightGBMModel
 from price_model.models.classical import (
     ArimaPerTicker,
+    FamaFrenchFactorModel,
     GarchVolForecaster,
     GbmMaximumLikelihood,
 )
@@ -28,6 +29,8 @@ MODEL_REGISTRY: dict[str, type[Model]] = {
     "ArimaPerTicker": ArimaPerTicker,
     "GarchVolForecaster": GarchVolForecaster,
     "GbmMaximumLikelihood": GbmMaximumLikelihood,
+    # Fama-French is pure numpy + the KF download adapter — no extras needed.
+    "FamaFrenchFactorModel": FamaFrenchFactorModel,
 }
 
 
@@ -41,6 +44,7 @@ __all__ = [
     "MODEL_REGISTRY",
     "ArimaPerTicker",
     "ChronosZeroShot",
+    "FamaFrenchFactorModel",
     "GarchVolForecaster",
     "GbmMaximumLikelihood",
     "LastReturnPredictor",

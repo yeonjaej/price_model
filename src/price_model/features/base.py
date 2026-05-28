@@ -53,6 +53,7 @@ def register(cls: type[Feature]) -> type[Feature]:
 def _trigger_registration() -> None:
     """Import every module that contains @register'd Feature subclasses."""
     import price_model.features.cross_features
+    import price_model.features.factor_loadings
     import price_model.features.technical  # noqa: F401
 
 

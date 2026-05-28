@@ -11,13 +11,52 @@ that feature MUST NOT ship until fixed.
 from __future__ import annotations
 
 import math
+from datetime import timedelta
 
+import numpy as np
 import polars as pl
 import pytest
 
 import price_model.features.cross_features
+import price_model.features.factor_loadings as _factor_loadings
 import price_model.features.technical  # noqa: F401  trigger registration
+from price_model.data.sources import fama_french
 from price_model.features.base import FEATURE_REGISTRY
+
+
+@pytest.fixture(autouse=True)
+def _patch_kf_offline(monkeypatch, synthetic_panel):
+    """Auto-patch the Ken French download so factor-loading features work offline.
+
+    The synthetic_panel covers a known date range; we synthesize KF factors over
+    the same range with the same RNG seed so the leakage test is deterministic.
+    """
+    dates = sorted(synthetic_panel["date"].unique().to_list())
+    # Extend a few days past either end so the join is always fully covered.
+    pad = 30
+    if dates:
+        first = dates[0] - timedelta(days=pad)
+        last = dates[-1] + timedelta(days=pad)
+        n = (last - first).days + 1
+        kf_dates = [first + timedelta(days=i) for i in range(n)]
+    else:  # pragma: no cover
+        kf_dates = []
+    rng = np.random.default_rng(seed=4242)
+    fake = pl.DataFrame(
+        {
+            "date": kf_dates,
+            "MKT_RF": rng.normal(0.0003, 0.011, len(kf_dates)),
+            "SMB": rng.normal(0.0, 0.005, len(kf_dates)),
+            "HML": rng.normal(0.0, 0.005, len(kf_dates)),
+            "RMW": rng.normal(0.0, 0.004, len(kf_dates)),
+            "CMA": rng.normal(0.0, 0.004, len(kf_dates)),
+            "RF": np.full(len(kf_dates), 1e-4),
+        }
+    ).with_columns(pl.col("date").cast(pl.Date))
+    monkeypatch.setattr(fama_french, "fetch", lambda *a, **kw: fake)
+    _factor_loadings._load_kf_factors.cache_clear()
+    yield
+    _factor_loadings._load_kf_factors.cache_clear()
 
 
 @pytest.mark.parametrize("feature_name", sorted(FEATURE_REGISTRY))

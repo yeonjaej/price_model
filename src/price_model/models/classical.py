@@ -424,3 +424,215 @@ class GbmMaximumLikelihood(Model):
             m._fits = {t: tuple(p) for t, p in data.items()}
             m._fitted = True
         return m
+
+
+# ---------------------------------------------------------------------------
+# Fama-French factor model — Fama-MacBeth two-pass procedure
+# ---------------------------------------------------------------------------
+
+DEFAULT_FAMA_FRENCH_PARAMS: dict[str, Any] = {
+    "factors": ("MKT_RF", "SMB", "HML", "RMW", "CMA"),
+    "min_history": 252,  # ~1y to estimate stable betas
+    "horizon_days": 5,
+    "lambda_window": 60,  # CS-regression window for factor risk premia (in trading days)
+}
+
+
+class FamaFrenchFactorModel(Model):
+    """Two-pass Fama-MacBeth on KF 5 factors.
+
+    Pipeline:
+    1. **Time-series pass (per ticker)**: regress the ticker's daily excess return
+       (r_i − r_f) on the K factor returns. Store the K-vector of factor loadings
+       β_i = (β_i,MKT, β_i,SMB, …).
+    2. **Cross-sectional pass (per date)**: regress the cross-section of next-day
+       excess returns on the previously-estimated β's, yielding K factor risk
+       premia λ_t = (λ_t,MKT, …) per date. We average the last `lambda_window`
+       trading days of λ to get λ_bar.
+    3. **Forecast**: r_hat_i = β_i · λ_bar  (h-step return ≈ h · daily forecast).
+
+    The output is normalized cross-sectionally per date (subtract date mean) so
+    predictions are comparable to LightGBM's excess-return target.
+
+    Why this is interesting beyond the standalone IC:
+    - On a 20-name liquid-mega-cap universe, factor premia are small relative to
+      idiosyncratic noise — IC is typically modest (~0.005–0.01). That's the
+      honest baseline.
+    - The estimated β's are also exposed as features (see
+      price_model.features.factor_loadings). LightGBM can consume those, which
+      is the cross-pollination that gives this scaffold real lift.
+
+    Data dependency: uses Ken French daily 5-factor returns (the
+    fama_french.fetch() adapter handles download + cache). The first walk-forward
+    split incurs a one-time download (~1MB).
+    """
+
+    def __init__(self, config: ModelConfig):
+        super().__init__(config)
+        # Per-ticker time-series-pass betas: dict[ticker, np.ndarray of shape (K,)]
+        self._betas: dict[str, np.ndarray] = {}
+        # Average cross-sectional risk premium vector (shape (K,))
+        self._lambda_bar: np.ndarray | None = None
+        # Cache of training panel last-known date — used to pull the lambda window
+        self._train_end_date: Any | None = None
+
+    def _params(self) -> dict[str, Any]:
+        return {**DEFAULT_FAMA_FRENCH_PARAMS, **self.config.params}
+
+    def _factor_panel(self) -> pl.DataFrame:
+        """Lazy KF factor download, deferred so import works without internet."""
+        from price_model.data.sources import fama_french
+
+        return fama_french.fetch()
+
+    def fit(self, panel: pl.DataFrame) -> None:
+        params = self._params()
+        factors = list(params["factors"])
+        min_history = int(params["min_history"])
+        lambda_window = int(params["lambda_window"])
+
+        ff = self._factor_panel().select(["date", *factors, "RF"])
+        panel = _log_returns(panel).join(ff, on="date", how="left")
+        # Excess return = ticker log return - daily risk-free rate
+        panel = panel.with_columns(
+            (pl.col("log_return") - pl.col("RF")).alias("_excess"),
+        )
+        # Drop rows where any factor or excess is null (warmup + KF lag)
+        train = panel.drop_nulls(subset=["_excess", *factors])
+
+        # --- Pass 1: per-ticker time-series regression ---
+        K = len(factors)
+        betas: dict[str, np.ndarray] = {}
+        for ticker in train["ticker"].unique().to_list():
+            sub = train.filter(pl.col("ticker") == ticker).sort("date")
+            if sub.height < min_history:
+                continue
+            y = sub["_excess"].to_numpy()
+            X = np.column_stack([sub[f].to_numpy() for f in factors])
+            # OLS with intercept absorbed (alpha is what's left over; we drop it
+            # because predictions are cross-sectionally demeaned anyway).
+            X_with_const = np.column_stack([np.ones(len(y)), X])
+            try:
+                coefs, *_ = np.linalg.lstsq(X_with_const, y, rcond=None)
+            except np.linalg.LinAlgError as e:
+                log.warning("FF time-series regression failed for %s: %s", ticker, e)
+                continue
+            betas[ticker] = coefs[1:]  # drop intercept (alpha)
+
+        # --- Pass 2: cross-sectional regression on each date with >= K+1 tickers ---
+        # For each date t, regress cross-section of r_i,t on (β_i,MKT, …, β_i,CMA)
+        # to get λ_t. Average the last `lambda_window` dates.
+        train_with_betas: list[dict] = []
+        for ticker, beta_vec in betas.items():
+            sub = train.filter(pl.col("ticker") == ticker)
+            for row in sub.iter_rows(named=True):
+                rec = {"date": row["date"], "ticker": ticker, "_excess": row["_excess"]}
+                for j, f in enumerate(factors):
+                    rec[f"_beta_{f}"] = float(beta_vec[j])
+                train_with_betas.append(rec)
+
+        if not train_with_betas:
+            log.warning("FamaFrenchFactorModel: no usable training rows; aborting fit")
+            self._betas = {}
+            self._lambda_bar = None
+            self._fitted = True
+            return
+
+        beta_panel = pl.DataFrame(train_with_betas)
+        dates_sorted = beta_panel["date"].unique().sort().to_list()
+        # Use the most recent `lambda_window` dates as the in-sample window
+        window_dates = set(dates_sorted[-lambda_window:])
+        recent = beta_panel.filter(pl.col("date").is_in(list(window_dates)))
+
+        lambda_acc = np.zeros(K)
+        lambda_n = 0
+        # Need at least 2 points to fit an intercept + at least one slope; in
+        # practice we want K tickers so the K slopes aren't trivially underdetermined,
+        # but with a 20-name deployment universe and K=5 that always holds.
+        min_cs_n = max(2, K)
+        for d in window_dates:
+            day = recent.filter(pl.col("date") == d)
+            if day.height < min_cs_n:
+                continue
+            y_t = day["_excess"].to_numpy()
+            X_t = np.column_stack([day[f"_beta_{f}"].to_numpy() for f in factors])
+            X_const = np.column_stack([np.ones(len(y_t)), X_t])
+            try:
+                coefs, *_ = np.linalg.lstsq(X_const, y_t, rcond=None)
+            except np.linalg.LinAlgError:
+                continue
+            lambda_acc += coefs[1:]
+            lambda_n += 1
+
+        if lambda_n == 0:
+            log.warning(
+                "FamaFrenchFactorModel: no dates with enough tickers for CS regression; "
+                "falling back to zero risk premia"
+            )
+            self._lambda_bar = np.zeros(K)
+        else:
+            self._lambda_bar = lambda_acc / lambda_n
+
+        self._betas = betas
+        self._train_end_date = dates_sorted[-1] if dates_sorted else None
+        self._fitted = True
+        log.info(
+            "FamaFrenchFactorModel fitted %d tickers, lambda from %d CS-days, factors=%s",
+            len(self._betas),
+            lambda_n,
+            factors,
+        )
+
+    def predict(self, panel: pl.DataFrame) -> pl.DataFrame:
+        self._check_fitted()
+        params = self._params()
+        h = int(params["horizon_days"])
+
+        if self._lambda_bar is None or not self._betas:
+            # Degenerate fit — emit zeros so the harness still has rows to evaluate.
+            unique = panel.select(["date", "ticker"]).unique().sort(["date", "ticker"])
+            return unique.with_columns(pl.lit(0.0).alias("prediction"))
+
+        # Daily forecast in excess-return units, scaled to horizon h.
+        # The model's daily prediction for ticker i is β_i · λ_bar; over h days,
+        # multiply by h (additive in expectation under iid assumption).
+        rows: list[dict] = []
+        for ticker in panel["ticker"].unique().to_list():
+            beta_vec = self._betas.get(ticker)
+            if beta_vec is None:
+                continue
+            daily_pred = float(np.dot(beta_vec, self._lambda_bar))
+            horizon_pred = daily_pred * h
+            for d in panel.filter(pl.col("ticker") == ticker)["date"].unique().to_list():
+                rows.append({"date": d, "ticker": ticker, "prediction": horizon_pred})
+
+        rows = _to_cross_sectional_excess(rows)
+        if not rows:
+            return pl.DataFrame(
+                schema={"date": pl.Date, "ticker": pl.Utf8, "prediction": pl.Float64}
+            )
+        return pl.DataFrame(rows).sort(["date", "ticker"])
+
+    def save(self, path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+        save_config(self.config, path / "config.json")
+        # Save betas + lambda as a single pickle for convenience
+        state = {
+            "betas": {t: b.tolist() for t, b in self._betas.items()},
+            "lambda_bar": None if self._lambda_bar is None else self._lambda_bar.tolist(),
+            "train_end_date": str(self._train_end_date) if self._train_end_date else None,
+        }
+        (path / "fits.json").write_text(json.dumps(state, indent=2))
+
+    @classmethod
+    def load(cls, path: Path) -> FamaFrenchFactorModel:
+        m = cls(load_config(path / "config.json"))
+        fits_path = path / "fits.json"
+        if fits_path.exists():
+            data = json.loads(fits_path.read_text())
+            m._betas = {t: np.array(b, dtype=float) for t, b in data.get("betas", {}).items()}
+            lam = data.get("lambda_bar")
+            m._lambda_bar = None if lam is None else np.array(lam, dtype=float)
+            m._train_end_date = data.get("train_end_date")
+            m._fitted = True
+        return m

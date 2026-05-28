@@ -1,0 +1,149 @@
+# Fama-French scaffolding — three-way controlled comparison.
+#
+# The same walk-forward harness, the same train/test splits, the same hyperparameters,
+# the same dates. The only thing that varies across the three LightGBM rows is the
+# feature subset. This is the cleanest possible ablation of the Fama-French features:
+#
+#   lightgbm_v2_baseline : v2 technical + cross-sectional features only (no FF).
+#   lightgbm_ff_v1       : v2 features + 5 naked rolling factor betas.
+#   lightgbm_ff_v2       : v2 features + 3 factor-spread / regime interaction features.
+#
+# Plus the textbook standalone Fama-MacBeth (ff_factor_v1) and a Zero baseline.
+#
+# Reading the result table: if v2_baseline ≥ ff_v1, the naked betas hurt. If ff_v2 ≥
+# v2_baseline, the spread features add signal. If all three LightGBM rows are within
+# noise of each other, the right conclusion is "Fama-French has nothing to say about
+# cross-sectional ranking on a 20-name liquid mega-cap universe" — which is the
+# textbook prediction and a defensible thing to report.
+#
+# Wall-clock estimate: ~10-20 min on the top20 universe with quarterly refit.
+# First run downloads ~1MB of KF data; subsequent runs read from data/raw/.
+
+experiment_id: fama_french_v1
+
+data:
+  universe: top20_2026_01_01
+  start: 2017-01-01
+  # Lock the panel to where the Ken French feed ends. KF publishes monthly,
+  # roughly the 5th-10th of the following month, so the daily series lags
+  # ~3-6 weeks behind today. Running the panel past KF's last date means
+  # the factor-loading features go null for those rows; drop_warmup_rows
+  # would then strip them, but the date coverage of the comparison becomes
+  # opaque ("why is end_date X for this run and Y for another?"). Locking
+  # the end-date here makes the experiment reproducible regardless of when
+  # the harness is invoked. Bump this when KF refreshes.
+  end: '2026-03-31'
+
+# Union of every feature any model in this run might use. The matrix is built
+# once against this list; each LightGBM row below selects a different subset
+# via its own `features:` override (see CLI's per-model feature plumbing).
+features:
+  # v2 technical + cross-sectional (8)
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  - vol_ewm_20
+  - vol_20_cs_min_dist
+  - mom60_minus_dist_ma200
+  # naked rolling FF betas (5)
+  - mkt_beta_60
+  - smb_beta_60
+  - hml_beta_60
+  - rmw_beta_60
+  - cma_beta_60
+  # factor-spread / regime-interaction features (4)
+  - mkt_beta_xs_dispersion
+  - mkt_beta_x_mkt_20d
+  - smb_beta_x_smb_20d
+  - hml_beta_x_hml_20d
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 63       # quarterly refit — KF data is small, fits are cheap
+  embargo_days: 6
+  min_train_days: 504       # ~2y of context
+
+# Shared LightGBM hyperparams (Kaggle-derived from extended_kaggle_v2).
+# Defined once as a YAML anchor so the three boosting rows can't drift apart.
+_lgbm_params: &lgbm_params
+  num_leaves: 128
+  learning_rate: 0.02
+  n_estimators: 2000
+  lambda_l2: 5.0
+  min_data_in_leaf: 100
+  feature_fraction: 0.8
+  bagging_fraction: 0.8
+  bagging_freq: 5
+  val_fraction: 0.15
+  early_stopping_rounds: 100
+  seeds: [42, 2024, 12345, 99, 420]
+
+# Feature subsets — also anchored so the lists stay readable.
+_v2_features: &v2_features
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  - vol_ewm_20
+  - vol_20_cs_min_dist
+  - mom60_minus_dist_ma200
+
+models:
+  - id: zero_v1
+    class: ZeroPredictor
+    params: {}
+
+  - id: ff_factor_v1
+    class: FamaFrenchFactorModel
+    params:
+      factors: [MKT_RF, SMB, HML, RMW, CMA]
+      min_history: 252
+      horizon_days: 5
+      lambda_window: 60
+
+  - id: lightgbm_v2_baseline
+    class: LightGBMModel
+    features: *v2_features
+    params: *lgbm_params
+
+  - id: lightgbm_ff_v1
+    class: LightGBMModel
+    # v2 features + naked rolling FF betas
+    features:
+      - return_5d
+      - momentum_60
+      - vol_20
+      - rsi_14
+      - distance_ma_200
+      - vol_ewm_20
+      - vol_20_cs_min_dist
+      - mom60_minus_dist_ma200
+      - mkt_beta_60
+      - smb_beta_60
+      - hml_beta_60
+      - rmw_beta_60
+      - cma_beta_60
+    params: *lgbm_params
+
+  - id: lightgbm_ff_v2
+    class: LightGBMModel
+    # v2 features + factor-spread / regime interaction features
+    features:
+      - return_5d
+      - momentum_60
+      - vol_20
+      - rsi_14
+      - distance_ma_200
+      - vol_ewm_20
+      - vol_20_cs_min_dist
+      - mom60_minus_dist_ma200
+      - mkt_beta_xs_dispersion
+      - mkt_beta_x_mkt_20d
+      - smb_beta_x_smb_20d
+      - hml_beta_x_hml_20d
+    params: *lgbm_params

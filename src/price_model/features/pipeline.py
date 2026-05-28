@@ -21,6 +21,7 @@ from collections.abc import Sequence
 import polars as pl
 
 import price_model.features.cross_features
+import price_model.features.factor_loadings
 import price_model.features.technical  # noqa: F401  trigger registration
 from price_model.features.base import get_feature
 from price_model.features.cross_sectional import NormKind, normalize
