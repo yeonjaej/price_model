@@ -83,6 +83,8 @@ def run_experiment(
     panel = load_panel(
         universe=cfg["data"]["universe"],
         start=cfg["data"]["start"],
+        end=cfg["data"].get("end"),
+        pit_filter=cfg["data"].get("pit_filter", False),
     )
     matrix = build_feature_matrix(
         panel,
@@ -97,9 +99,15 @@ def run_experiment(
         all_preds_by_model: list[pl.DataFrame] = []
         for m in cfg["models"]:
             console.rule(f"[bold]{m['id']}")
+            # Per-model `features:` overrides the experiment-wide list — lets a
+            # single experiment compare e.g. {baseline features} vs {baseline + extras}
+            # on identical splits/horizons/embargos. Feature matrix is built once
+            # against the union (cfg["features"]); models just select different
+            # column subsets at fit/predict time.
+            model_features = m.get("features", cfg["features"])
             config = ModelConfig(
                 model_id=m["id"],
-                feature_cols=tuple(cfg["features"]),
+                feature_cols=tuple(model_features),
                 target_col="y",
                 params=m.get("params", {}),
             )
@@ -107,7 +115,7 @@ def run_experiment(
             preds = run_walk_forward(
                 matrix,
                 model=model,
-                feature_cols=cfg["features"],
+                feature_cols=model_features,
                 target_col="y",
                 experiment_id=cfg["experiment_id"],
                 horizon_days=cfg["target_horizon"],
@@ -140,6 +148,62 @@ def run_experiment(
         console.print(table)
     finally:
         store.close()
+
+
+@app.command("build-universe")
+def build_universe(
+    name: Annotated[str, typer.Option("--name")] = "sp500_pit",
+    start: Annotated[str, typer.Option("--start")] = "2017-01-01",
+    end: Annotated[str, typer.Option("--end")] = "2026-12-31",
+) -> None:
+    """Build a universe file from PIT membership.
+
+    Walks the historical S&P 500 membership table (Wikipedia via
+    `data.sources.sp500_membership`) and writes every ticker that was a
+    member at any point during [start, end] to
+    `src/price_model/data/universes/<name>.txt`.
+
+    This is the expanded universe you want when running PIT-correct backtests:
+    yfinance has price history for delisted names up to their removal date,
+    and the PIT filter (load_panel(..., pit_filter=True)) will trim each row
+    to the date range where the ticker was actually in the index.
+
+    Triggers the Wikipedia fetch on first run (~5 seconds, cached afterwards).
+    """
+    from datetime import datetime
+
+    from price_model.data.membership import members_during_window
+
+    start_d = datetime.fromisoformat(start).date()
+    end_d = datetime.fromisoformat(end).date()
+
+    tickers = sorted(members_during_window(start_d, end_d))
+    out_path = Path(__file__).parent / "data" / "universes" / f"{name}.txt"
+    out_path.write_text("\n".join(tickers) + "\n")
+
+    # Split for the summary into "currently active" vs "historical".
+    # `date.today()` is Python 3.14-clean (utcnow() is deprecated).
+    from datetime import date as _date
+
+    from price_model.data.membership import members_on_date
+
+    today = _date.today()
+
+    active_today = members_on_date(today)
+    historical = [t for t in tickers if t not in active_today]
+    active = [t for t in tickers if t in active_today]
+
+    console.print(
+        f"[bold]Built universe '{name}'[/bold]: {len(tickers)} tickers covering "
+        f"{start_d} → {end_d}\n"
+        f"  • {len(active)} currently active in S&P 500\n"
+        f"  • {len(historical)} historical (removed during or before the window)\n"
+        f"  → wrote {out_path}"
+    )
+    if historical:
+        sample = ", ".join(sorted(historical)[:10])
+        more = "" if len(historical) <= 10 else f" (+{len(historical) - 10} more)"
+        console.print(f"  Historical sample: {sample}{more}")
 
 
 @app.command("dashboard")
