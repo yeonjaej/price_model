@@ -1,0 +1,74 @@
+# Anomaly-augmented version of extended_kaggle_v2, run on the PIT-correct
+# expanded universe.
+#
+# What's new vs extended_kaggle_v2_pit:
+#   + momentum_12_1       Jegadeesh-Titman 12-1 month momentum (the *real* momentum factor)
+#   + distance_52w_high   Hong-Lim-Stein 52-week-high anchoring
+#   + return_1d           Single-day reversal signal (Lehmann 1990)
+#
+# Hypothesis: the technical-only feature set without these classic anomalies
+# was missing the few signals that actually survive PIT-correct evaluation on
+# liquid US equities. After this addition, the headline IC should move from
+# +0.0008 (no significant edge) to something in the +0.005 to +0.015 range
+# (small but real and statistically significant if t-stat clears 2).
+#
+# Hyperparameters match `extended_kaggle_v2_pit` exactly so the comparison
+# isolates the FEATURE effect.
+
+experiment_id: extended_kaggle_v2_anomaly
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true                # PIT correction stays ON — we want the honest IC
+
+features:
+  # Existing v2 features (10)
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  # - momentum_60_sector_rel       # disabled — sector map only covers 156 names
+  - idio_vol_20
+  - momentum_60_rank
+  - vol_20_rank
+  - distance_ma_200_rank
+  - vol_ewm_20
+  - vol_20_cs_min_dist
+  - mom60_minus_dist_ma200
+  # New anomaly features (3) — the hypothesis under test
+  - momentum_12_1
+  - distance_52w_high
+  - return_1d
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_anomaly
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v2_anomaly
+    class: LightGBMModel
+    params:
+      # Same reduced-footprint hyperparams as the PIT/expanded runs so the
+      # comparison isolates the feature effect, not the model capacity.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]
