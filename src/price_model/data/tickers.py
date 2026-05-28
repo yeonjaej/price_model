@@ -138,7 +138,7 @@ TICKER_DROP_LIST: set[str] = {
     "FSR",    # Fisker Inc — Chapter 11 (Jun 2024)
     "FTR",    # Frontier Communications — bankruptcy (Apr 2020), now FYBR
     "MNK",    # Mallinckrodt — Chapter 11 (twice)
-    "CHK",    # Chesapeake Energy — Chapter 11 (Jun 2020), re-listed but yf broken
+    "CHK",    # Chesapeake Energy — Chapter 11 (Jun 2020); re-listed but yfinance returns no usable data
 
     # Went private — no current ticker
     "CTXS",   # Citrix — taken private by Vista/Elliott (Sep 2022)
