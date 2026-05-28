@@ -94,9 +94,11 @@ def _download_html() -> str:
     import urllib.request
 
     log.info("Downloading S&P 500 membership from %s", WIKIPEDIA_URL)
+    # Wikipedia rejects requests without a User-Agent header; supply a generic
+    # identifier rather than a personal one.
     req = urllib.request.Request(
         WIKIPEDIA_URL,
-        headers={"User-Agent": "price-model/0.1 (research; github.com/yeonjaejwa/price_model)"},
+        headers={"User-Agent": "price-model/0.1 (research project)"},
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         return resp.read().decode("utf-8")
