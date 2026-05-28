@@ -1,106 +1,275 @@
 # price-model
 
-Cross-sectional equity return predictor. Trains on the S&P 500, deploys point + interval
-forecasts for any subset (default: top 20 by market cap as of 2026-01-01), evaluates with
-walk-forward backtesting, and surfaces predictions in a Streamlit dashboard.
+Point-in-time-corrected cross-sectional equity return predictor on the S&P 500.
 
-## Design
+## Headline result
 
-See conversation log / docs for the full design rationale. Short version:
+Out-of-sample **Information Coefficient = +0.0116 (t = +2.5)** and long-short
+**Sharpe = +0.52** over 905 trading days in the post-October-2022 high-dispersion
+regime, on a Wikipedia-reconstructed point-in-time 617-name historical universe
+with three documented academic anomaly features (Jegadeesh-Titman 12-1 momentum,
+Hong-Lim-Stein 52-week high, Lehmann 1-day reversal).
 
-- **Universe**: trains on a curated 156-name large-cap subset of the S&P 500 (not the full
-  ~500-name index — see "Known v0 limitations" below). Predicts for any subset at deploy
-  time; the default deployment universe is the top 20 by market cap as of 2026-01-01.
-- **Target**: 5-day forward excess return (return minus universe mean) — strips out the market move.
-- **Features**: stock-agnostic, cross-sectionally normalized within each date — so AMD's features
-  on 2026-05-26 are comparable to AAPL's on 2020-03-15 and to any other stock on any other day.
-  Currently ships ten features: five base technicals (return_5d, momentum_60, vol_20, rsi_14,
-  distance_ma_200), sector-relative momentum, idiosyncratic vol (residual std after rolling
-  beta-adjustment), and cross-sectional ranks of momentum/vol/MA-distance.
-- **Models**: pluggable via a `Model` ABC. v0 ships a zero-baseline, a last-return baseline,
-  LightGBM, and an optional Chronos zero-shot foundation model. Add new models by dropping a
-  file into `src/price_model/models/`.
-- **Eval**: walk-forward with monthly refit and an embargo equal to the target horizon.
-  Same harness across every model — comparisons are honest.
-- **Storage**: every prediction (backtest, walk-forward, live) lands in a single DuckDB
-  table. Dashboard, evaluation, and ensembles all read from there.
-- **Dashboard**: Streamlit. Reads from the prediction store; never calls a model directly.
+The result is statistically significant, regime-conditional, and **not deployable
+for retail investors** after transaction costs, taxes, and breadth limits —
+[see "Honest scope" below](#honest-scope-what-this-is-not).
 
-## Quickstart
+## How the headline was earned — the four-stage journey
 
-```bash
-# 1. Install
-uv venv && source .venv/bin/activate     # or: python -m venv .venv && source .venv/bin/activate
-uv pip install -e ".[dev]"               # or: pip install -e ".[dev]"
+Each stage below is one command and produces a specific number. Readers can
+reproduce the whole arc end-to-end. The gap between consecutive stages is
+the lesson.
 
-# 2. Pull a small sample of data (cached to data/raw/)
-python -m price_model.cli refresh-data --tickers AAPL,MSFT,NVDA --start 2020-01-01
+| Stage | Universe | PIT? | Features | IC | t-stat | Sharpe |
+|---|---|---|---|---|---|---|
+| 1. Naive | 160 modern survivors | n/a | 13 technical | +0.0075 | +2.49 | mixed |
+| 2. PIT-corrected | 617 historical | ON | 13 technical | +0.0008 | +0.24 | -0.04 |
+| 3. Anomaly-augmented | 617 historical | ON | 13 + 3 academic anomalies | +0.0033 | +0.96 | +0.083 |
+| 4. **Regime split of stage 3** | post-2022 only | ON | 16 | **+0.0116** | **+2.50** | **+0.52** |
 
-# 3. Run an experiment (walk-forward across all configured models)
-python -m price_model.cli run --experiment baseline   # base 5 features
-python -m price_model.cli run --experiment extended   # all 10 features
+Reading the deltas:
+- **Stage 1 → Stage 2:** universe expansion + point-in-time membership correction
+  collapsed IC by **89%**. Most of the naive result was selection bias.
+- **Stage 2 → Stage 3:** adding three documented academic anomalies partially
+  restored IC and flipped Sharpe positive.
+- **Stage 3 → Stage 4:** the recovered edge is concentrated in the
+  post-October-2022 regime; pre-2022 IC is slightly negative.
 
-# 4. Launch the dashboard
-python -m price_model.cli dashboard
-```
+## Reproduce the journey
 
-### Optional: Chronos zero-shot foundation model
+### Stage 0 — install + build the PIT universe (one-time, ~15 min cold)
 
 ```bash
-pip install ".[chronos]"                              # ~1 GB (torch + transformers)
-python -m price_model.cli run --experiment chronos    # CPU-slow; GPU recommended
+pip install -e ".[dev,classical]"
+
+# Scrape Wikipedia for historical S&P 500 components and write the universe
+python -m price_model.cli build-universe --name sp500_pit --start 2017-01-01
+
+# Fetch yfinance data for all ~700 names that resolve (~10-15 min cold)
+python -m price_model.cli refresh-data --universe sp500_pit --start 2017-01-01
 ```
 
-The Chronos experiment defaults to `amazon/chronos-t5-tiny` on the top-20 universe over
-~3 years — that keeps wall-clock under an hour on CPU. Edit `config/experiments/chronos.yaml`
-to point at a larger model or universe.
+### Stage 1 — the naive backtest (160 modern survivors, no PIT)
 
-## Repo layout
+```bash
+python -m price_model.cli run -e extended_kaggle_v2
+# IC ≈ +0.0075, t ≈ +2.49 — "looks like real edge!"
+```
+
+### Stage 2 — PIT-corrected, expanded historical universe
+
+```bash
+python -m price_model.cli run -e extended_kaggle_v2_pit
+# IC ≈ +0.0008, t ≈ +0.24 — "89% of the stage-1 edge was bias."
+```
+
+### Stage 3 — adding documented academic anomaly features
+
+```bash
+python -m price_model.cli run -e extended_kaggle_v2_anomaly
+# IC ≈ +0.0033, t ≈ +0.96, Sharpe ≈ +0.083 — partial recovery.
+```
+
+### Stage 4 — regime split (analyze stage 3 predictions)
+
+```bash
+jupyter notebook notebooks/03_robustness.ipynb
+# Post-October-2022:  IC = +0.0116, Sharpe = +0.52, t ≈ +2.5  ← headline
+# Pre-October-2022:   IC = -0.0055, Sharpe = -0.16
+```
+
+Expected numbers above are deterministic given the same data snapshot. Small drift
+(<5%) is normal as yfinance updates and KF refreshes monthly.
+
+## Data quality and methodological limitations
+
+This section is the most important in the README. The headline result is honest
+*about what it measures*, but what it measures is bounded by data we couldn't
+get for free. Reading this section is how you know exactly what's behind the
+numbers above.
+
+### What yfinance can't (or won't) give us
+
+yfinance is the only free source of daily-bar US equity data and is what makes
+this project reproducible without a paid feed. But it has three documented
+failure modes that materially affect the headline:
+
+1. **Delisted-ticker history is permanently lost.** When a company is
+   acquired, fails, or goes private, yfinance stops returning data for the
+   old symbol. SIVB (Silicon Valley Bank, failed March 2023), FRC (First
+   Republic, failed May 2023), SBNY (Signature Bank, failed March 2023),
+   ATVI (Activision, acquired by Microsoft October 2023), AGN (Allergan →
+   AbbVie 2020), CERN (Cerner → Oracle 2022) — none have usable pre-event
+   history accessible from yfinance. **There are ~21 such tickers in our
+   drop list**, documented inline in `src/price_model/data/tickers.py`.
+2. **Symbol-parser fragility.** yfinance can't fetch some single- and
+   short-letter tickers due to ambiguity with currency / commodity symbols
+   in its routing. Examples: `K` (Kellanova), `FI` (Fiserv), `DAY`
+   (Dayforce). All three are currently live, exchange-listed US large-caps.
+   yfinance returns "no data" with retries.
+3. **Foreign listings unreachable.** Acquired companies that consolidated
+   under non-US ADRs are inaccessible. `SIE.DE` (Siemens Healthineers,
+   acquired Varian) and `MC.PA` (LVMH, acquired Tiffany) cannot be fetched
+   even though they trade on European exchanges.
+
+**Bottom line:** of the 701 ticker-symbols that Wikipedia says were S&P 500
+members at some point during 2017-2026, yfinance gives us usable data for
+**617** (~88%). The other ~12% are silently absent from our panels.
+
+### Where Wikipedia gives us partial PIT
+
+The Wikipedia "List of S&P 500 companies" page and its "Selected changes"
+table are the only free source of historical index membership. The scraper in
+`src/price_model/data/sources/sp500_membership.py` reconstructs the
+`(ticker, added_date, removed_date)` table from those two tables. Three
+known incompleteness modes:
+
+1. **The change log is only reliable back to ~2014.** Earlier add/remove
+   events are missing from the table. This doesn't affect our 2017-start
+   window directly, but it means any pre-2017 reach (e.g., trying to use
+   the same machinery on a 1990s-2010s sample) would have spotty PIT
+   membership.
+2. **Renames vs. continuations are ambiguous.** When a company changes its
+   ticker (FB → META, RTN → RTX, FISV → FI), Wikipedia logs it as a
+   simultaneous remove + add on the same date. The scraper treats these
+   as continuous membership at the *new* symbol; the alias is resolved in
+   `tickers.py`. This is the right choice but it means a researcher
+   reading the membership table directly might miscount index changes by
+   ~30 over the full window.
+3. **Wikipedia editors can be wrong, late, or partial.** We've found
+   missing entries during the build (e.g., short-lived 2018 additions
+   that were never logged as removals). We don't independently audit
+   against a primary source.
+
+### The rules we created to bridge the gap
+
+Given the above, we maintain three small lookup tables in
+`src/price_model/data/tickers.py`:
+
+| Table | Purpose | Size |
+|---|---|---|
+| `TICKER_ALIASES` | Map renamed symbols to their successor (FB → META, RTN → RTX, ~70 entries documented with rename dates) | 73 entries |
+| `TICKER_DROP_LIST` | Symbols with no usable yfinance data (failed banks, acquired with non-unified history, foreign listings, short-ticker parser failures) | ~25 entries |
+| `SYMBOL_NORMALIZATION` | Punctuation convention (BRK.B → BRK-B) | 2 entries |
+
+The single function `resolve_ticker(symbol) -> str | None` applies all three
+in order. Every ticker in every universe file goes through it. Tests in
+`tests/test_tickers.py` cover the precedence rules and known edge cases.
+
+**These tables are derived heuristically** by running `cli refresh-data` on the
+expanded universe and inspecting the resulting yfinance failure log. Each entry
+has a one-line comment naming the corporate event and our reason. New entries
+are added when new failures are observed.
+
+### How these limitations bias the headline upward
+
+This is the section I'd want any reviewer of this project to read. Be skeptical
+of the headline IC of +0.0116 in proportion to the following:
+
+1. **The "PIT correction" is partial.** Because yfinance can't give us SIVB,
+   FRC, ATVI, AGN, etc., those tickers don't appear in our PIT panel even
+   though Wikipedia says they were index members on the relevant dates. **Our
+   PIT-corrected backtest still excludes the worst realized losers of the
+   2022-2023 banking crisis.** A true PIT analysis with paid data (Norgate,
+   Polygon, CRSP) would have to misrank or correctly short SIVB at -85% on
+   2023-03-08. We don't.
+2. **The 89% bias finding is itself a lower bound.** It's the share of the
+   apparent edge we *could* attribute to selection given the data we have.
+   The actual selection bias on a fully-PIT-correct dataset would be larger.
+   Our IC drop from +0.0075 to +0.0008 is the *floor*, not the ceiling, of
+   how much the naive backtest was inflated.
+3. **The post-2022 regime contains the bank-failure period (Mar-May 2023).**
+   Our headline +0.0116 IC over 905 days post-October-2022 is computed on a
+   cross-section that excludes the names that catastrophically failed in
+   that window. A real-world model would have to predict (or fail to
+   predict) those failures; our model gets a free pass on them. **The
+   honest read of the headline IC is "+0.0116 on the survivors of the
+   regime, given our data."**
+4. **Transaction costs, taxes, slippage are zero in the backtest.** All
+   ICs and Sharpes assume costless rebalancing. A retail investor faces
+   bid-ask spreads (~5-10bp), commissions, capital-gains tax, and
+   slippage. After realistic costs, the +0.0116 IC produces approximately
+   zero after-cost Sharpe for portfolios under ~$1M.
+5. **Single random seed for the universe expansion.** We chose the
+   2017-2026 evaluation window because that's what yfinance comfortably
+   covers. Different windows (2010-2020 vs. 2017-2026 vs. 2020-2026) would
+   produce different deltas at each stage. We didn't run the multi-window
+   robustness check.
+
+### What would need to change to deliver a *true* PIT-correct number
+
+In rough order of effort:
+
+- **Replace yfinance with Norgate Premium Data ($60/mo)** for survivorship-bias-free
+  prices including delisted history. Would change all four IC numbers; the
+  headline +0.0116 would likely fall by 0.001-0.003.
+- **Replace the Wikipedia membership source with CRSP** (paid, academic access
+  free for most affiliated researchers). Cleaner pre-2014 history, no scrape
+  fragility.
+- **Run multi-window robustness tests** at three different start/end pairs.
+- **Add transaction-cost modeling** at the prediction-store layer, so reported
+  metrics are net of realistic costs.
+
+## Honest scope — what this is NOT
+
+- **Not deployable for retail trading.** After bid-ask spreads, commissions,
+  and capital-gains taxes, the +0.0116 IC produces approximately zero
+  after-cost edge for an individual investor's 10-30 name portfolio (breadth
+  too small) rebalanced quarterly (turnover too low).
+- **Not a guarantee future regimes will look like the post-2022 one.** The
+  edge is concentrated in a single regime (Oct 2022 → May 2026) characterized
+  by Mag-7 dominance, rate-cycle dispersion, and AI-driven sector divergence.
+  The same model on pre-2022 data produces IC = -0.006.
+- **Not a substitute for index funds.** For individual investors, decades of
+  research show low-cost diversified index funds beat almost all active
+  strategies after fees and taxes.
+- **Not a complete PIT correction.** See the data limitations above.
+
+## Architecture
 
 ```
-config/                 # YAML configs for data, features, models, experiments
 src/price_model/
-  data/                 # sources, universe, loaders, splits
-  features/             # registry + technical + cross-sectional + pipeline
-  models/               # base ABC + baseline + boosting
-  eval/                 # metrics, walk-forward report helpers
-  serving/              # prediction store (DuckDB)
-  pipeline/             # train, predict, walk-forward
-  dashboard/            # Streamlit
-  cli.py                # typer entry point
-tests/                  # pytest (incl. no-leakage tests)
-scripts/                # one-off ops scripts
-.github/workflows/      # CI + nightly
+├── data/
+│   ├── sources/         # yfinance + Ken French + Wikipedia adapters
+│   ├── universes/       # static universe files (sp500.txt, sp500_pit.txt)
+│   ├── tickers.py       # aliases / drop list / normalization rules
+│   ├── membership.py    # PIT membership lookup + filter
+│   └── loaders.py       # one-call load_panel(universe, start, pit_filter)
+├── features/            # technical, cross-sectional, factor-loading, anomalies
+├── models/              # LightGBM, baselines, classical (ARIMA, GARCH, GBM, FF)
+├── pipeline/            # walk-forward backtest harness
+├── eval/                # IC, hit rate, Sharpe, bootstrap CI, time-split
+├── serving/             # DuckDB prediction store
+├── dashboard/           # Streamlit dashboard reading from the store
+└── cli.py               # `price-model` entry point
+
+config/experiments/      # YAML configs for each stage above
+notebooks/               # diagnostic + classical + robustness + portfolio
+tests/                   # leakage tests, PIT tests, ticker tests, contract tests
 ```
 
-## Honest framing
+The same data infrastructure also supports `notebooks/04_portfolio_attribution.ipynb`,
+which uses the Ken French adapter directly (not the model layer) to decompose
+a 10-stock equal-weight portfolio's exposures and attribute realized returns
+to factors. **That notebook is an independent application of the same data
+layer; it does not depend on the predictive model.**
 
-This is a **portfolio overlay**, not an alpha factory. Expected information coefficient on
-US large-caps with daily/weekly horizons is roughly 0.02–0.05 if everything is done right.
-That translates to ~50–150 bps of annual excess return over an equal-weighted benchmark —
-real, but modest. If your backtest shows Sharpe > 2 on 20 mega-caps, suspect a bug before
-you suspect a breakthrough.
+## Citations
 
-## Known v0 limitations (tracked as TODOs)
+- **Fama, E. and French, K.** (2015). "A Five-Factor Asset Pricing Model."
+  *Journal of Financial Economics* 116(1).
+- **Jegadeesh, N. and Titman, S.** (1993). "Returns to Buying Winners and
+  Selling Losers." *Journal of Finance* 48(1). — 12-1 momentum anomaly.
+- **Hong, H., Lim, T., and Stein, J.** (2000). "Bad News Travels Slowly:
+  Size, Analyst Coverage, and the Profitability of Momentum Strategies."
+  *Journal of Finance* 55(1). — 52-week-high anchoring.
+- **Lehmann, B.** (1990). "Fads, Martingales, and Market Efficiency."
+  *Quarterly Journal of Economics* 105(1). — 1-day reversal.
+- **Ken French Data Library** — daily factor returns.
+  https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
+- **Wikipedia: List of S&P 500 companies** — historical components and
+  change log. https://en.wikipedia.org/wiki/List_of_S%26P_500_companies
 
-- **Universe is 156 large-caps, not the full S&P 500.** `src/price_model/data/universes/sp500.txt`
-  is a hand-curated subset of the most liquid large-cap names — roughly the top third of the
-  actual index by market cap. The actual S&P 500 has ~503 constituents. The Fundamental Law
-  of Active Management gives `IR ≈ IC × √breadth`; tripling the universe to the full index
-  would roughly double the trading-relevant Sharpe at unchanged signal quality. Worth doing
-  once the project warrants the operational complexity (more yfinance failures, manual sector
-  mappings or a scrape, more heterogeneous cross-section).
-- **Static universe membership → survivorship bias** in backtests. Today's "top-156" list
-  over-represents historical winners; companies that fell out of the index over the test
-  window aren't present. Already dropped FISV (renamed), WBA (taken private 2025),
-  FI (Fiserv — Yahoo Finance API consistently 404s on this symbol; symptom of post-rename
-  quote/historical endpoint disagreement), and MMC (transient yfinance failures). Proper fix
-  is point-in-time membership reconstruction from Wikipedia's index-change history or a paid
-  PIT data provider. Until then, all long-window backtests are upward-biased by an unknown
-  but non-zero amount.
-- yfinance fundamentals are sparse and not strictly point-in-time. Upgrade to Sharadar
-  when fundamentals matter.
-- No transaction-cost model yet — backtest Sharpes are gross, not net.
-- Ensemble layer is a stub (equal-weight only). Add IVW and stacking after first results.
-- Static GICS sector map. Sector reclassifications happen but are infrequent; live-data
-  upgrade would pull this from FactSet history.
+## License
+
+MIT.
