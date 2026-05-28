@@ -1,0 +1,62 @@
+# v2 features added on top of the Kaggle-tuned LightGBM config.
+#
+# What's new vs extended_kaggle.yaml:
+#   + vol_ewm_20            (EWM volatility, span=20)
+#   + vol_20_cs_min_dist    (cross-sectional vol distance from minimum)
+#   + mom60_minus_dist_ma200 (overbought/stretched signal)
+#
+# All three came out of the diagnostic notebook (notebooks/01_diagnostics.ipynb)
+# with univariate t-stats above the conventional |2| threshold. Same boosting
+# hyperparams as extended_kaggle so the comparison isolates the feature effect.
+experiment_id: extended_kaggle_v2_pit   # was: extended_kaggle_v2
+
+data:
+  universe: sp500_pit                   # was: sp500
+  start: 2017-01-01
+  pit_filter: true                      # NEW — turns on the membership filter
+
+features:
+  # Existing 10
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  #- momentum_60_sector_rel
+  - idio_vol_20
+  - momentum_60_rank
+  - vol_20_rank
+  - distance_ma_200_rank
+  # New 3 (v2)
+  - vol_ewm_20
+  - vol_20_cs_min_dist
+  - mom60_minus_dist_ma200
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_pit       # different id so it doesn't collide with the existing zero_v1
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v2_pit
+    class: LightGBMModel
+    params:
+      learning_rate: 0.02
+      num_leaves: 64                 # was 128 — single biggest memory win
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000             # was 2000 — early stopping usually fires <500 anyway
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345] 

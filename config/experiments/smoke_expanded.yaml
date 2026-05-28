@@ -1,0 +1,24 @@
+experiment_id: smoke_expanded
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: false
+features:
+  - return_5d
+  - momentum_60
+  - vol_20
+normalize_kind: zscore
+target_horizon: 5
+walk_forward:
+  refit_freq_days: 252     # annual refit, so only ~10 splits instead of 126
+  embargo_days: 6
+  min_train_days: 504
+models:
+  - id: lightgbm_smoke
+    class: LightGBMModel
+    params:
+      learning_rate: 0.05
+      num_leaves: 32
+      min_data_in_leaf: 500
+      n_estimators: 200
+      seeds: [42]          # ONE seed, not five
