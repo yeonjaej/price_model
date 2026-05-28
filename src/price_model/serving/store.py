@@ -61,11 +61,34 @@ CREATE INDEX IF NOT EXISTS predictions_lookup
 
 
 class PredictionStore:
-    def __init__(self, path: Path | str = DEFAULT_PATH):
+    def __init__(self, path: Path | str = DEFAULT_PATH, *, read_only: bool = False):
+        """Open the DuckDB-backed predictions store.
+
+        DuckDB takes an exclusive lock on the file by default, so two writer
+        processes (e.g. a Streamlit dashboard and a CLI experiment run) will
+        collide. Pass `read_only=True` from any process that only queries —
+        multiple read-only readers can coexist with each other AND with a
+        single writer, which is what makes the dashboard usable while a
+        backtest is running.
+
+        When `read_only=True` we skip the `CREATE TABLE IF NOT EXISTS`
+        bootstrap (no write privilege available). If the file doesn't exist
+        yet, we briefly open read-write to create the schema, then re-open
+        read-only — that one-shot bootstrap costs ~milliseconds and only
+        runs the first time the dashboard launches against a clean repo.
+        """
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = duckdb.connect(str(self.path))
-        self._conn.execute(SCHEMA_SQL)
+        self._read_only = read_only
+
+        if read_only and not self.path.exists():
+            bootstrap = duckdb.connect(str(self.path))
+            bootstrap.execute(SCHEMA_SQL)
+            bootstrap.close()
+
+        self._conn = duckdb.connect(str(self.path), read_only=read_only)
+        if not read_only:
+            self._conn.execute(SCHEMA_SQL)
 
     # ----- writes -----
 
