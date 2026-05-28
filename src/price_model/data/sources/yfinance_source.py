@@ -200,8 +200,15 @@ def fetch(
         )
     )
 
+    # Apply the ticker rules (alias + drop + normalization) once, here, so
+    # downstream callers never need to know about them. Defensive against
+    # callers that bypass `load_universe` and pass raw lists.
+    from price_model.data.tickers import resolve_ticker
+
+    resolved = {r for r in (resolve_ticker(t) for t in tickers) if r is not None}
+
     frames: list[pl.DataFrame] = []
-    for ticker in sorted(set(tickers)):
+    for ticker in sorted(resolved):
         cache = _cache_path(raw_dir, ticker)
         df: pl.DataFrame | None = None
         if use_cache and cache.exists():

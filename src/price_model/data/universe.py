@@ -32,18 +32,28 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from price_model.data.tickers import resolve_ticker
+
 UNIVERSE_DIR = Path(__file__).parent / "universes"
 
 
 @lru_cache(maxsize=8)
 def load_universe(name: str) -> tuple[str, ...]:
-    """Load a universe by name. Returns a sorted tuple of tickers."""
+    """Load a universe by name. Returns a sorted tuple of tickers.
+
+    Every ticker is routed through `tickers.resolve_ticker()` before being
+    returned. That applies the rename map (FB → META, RTN → RTX, ...) and
+    drops anything on `TICKER_DROP_LIST` (delisted / failed / went private,
+    where yfinance has no usable history). The result is a clean universe
+    that won't waste yfinance retries on known-dead symbols.
+    """
     path = UNIVERSE_DIR / f"{name}.txt"
     if not path.exists():
         available = sorted(p.stem for p in UNIVERSE_DIR.glob("*.txt"))
         raise FileNotFoundError(f"Universe {name!r} not found. Available: {available}")
-    tickers = [line.strip() for line in path.read_text().splitlines() if line.strip()]
-    return tuple(sorted(set(tickers)))
+    raw = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    resolved = {r for r in (resolve_ticker(t) for t in raw) if r is not None}
+    return tuple(sorted(resolved))
 
 
 def list_universes() -> list[str]:
