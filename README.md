@@ -14,18 +14,34 @@ The result is statistically significant, regime-conditional, and **not deployabl
 for retail investors** after transaction costs, taxes, and breadth limits —
 [see "Honest scope" below](#honest-scope-what-this-is-not).
 
+### Metric definitions
+
+- **Information Coefficient (IC)**: per-date Spearman rank correlation between
+  predicted and realized 5-day forward excess returns, averaged across all
+  dates in the evaluation window. Measures how well the model *ranks* names
+  in the cross-section. IC ∈ [-1, +1]; +0.02 with t-stat > 2 is a credible
+  edge on liquid US large-caps.
+- **t-stat (of IC)**: `mean(daily IC) / (stdev(daily IC) / √n_dates)`. Tests
+  whether the mean IC is distinguishable from zero. |t| > 1.96 corresponds
+  to p < 0.05 (5% significance).
+- **Long-short Sharpe**: annualized Sharpe ratio of a daily-rebalanced
+  portfolio that goes long the top-decile predicted names and short the
+  bottom-decile, equal-weighted. Sharpe = `mean(daily return) / stdev(daily
+  return) × √252`. Above +1.0 is the conventional bar for "would actually
+  trade this institutionally"; reported here gross of all transaction costs.
+
 ## How the headline was earned — the four-stage journey
 
 Each stage below is one command and produces a specific number. Readers can
 reproduce the whole arc end-to-end. The gap between consecutive stages is
 the lesson.
 
-| Stage | Universe | PIT? | Features | IC | t-stat | Sharpe |
+| Stage | Universe | PIT filter | Features | IC | t-stat | Sharpe |
 |---|---|---|---|---|---|---|
-| 1. Naive | 160 modern survivors | n/a | 13 technical | +0.0075 | +2.49 | mixed |
+| 1. Subset universe | 160 modern survivors | OFF | 13 technical | +0.0075 | +2.49 | +0.28 |
 | 2. PIT-corrected | 617 historical | ON | 13 technical | +0.0008 | +0.24 | -0.04 |
 | 3. Anomaly-augmented | 617 historical | ON | 13 + 3 academic anomalies | +0.0033 | +0.96 | +0.083 |
-| 4. **Regime split of stage 3** | post-2022 only | ON | 16 | **+0.0116** | **+2.50** | **+0.52** |
+| 4. **Regime split of stage 3** | 617 historical, post-Oct-2022 only | ON | 16 | **+0.0116** | **+2.50** | **+0.52** |
 
 Reading the deltas:
 - **Stage 1 → Stage 2:** universe expansion + point-in-time membership correction
@@ -253,6 +269,41 @@ which uses the Ken French adapter directly (not the model layer) to decompose
 a 10-stock equal-weight portfolio's exposures and attribute realized returns
 to factors. **That notebook is an independent application of the same data
 layer; it does not depend on the predictive model.**
+
+### On the Streamlit dashboard
+
+`src/price_model/dashboard/` is a thin Streamlit reader over the DuckDB
+prediction store. It exists so the model's daily output can be inspected
+visually (per-date top/bottom decile, rolling IC, prediction vs. realized
+scatter) without writing a notebook for each look. It is **a debugging /
+monitoring surface, not part of the reproduction journey**. None of the
+headline numbers in this README come from the dashboard, and skipping it
+does not affect reproducing any of the four stages. It is most useful if you
+want to extend the model and need a quick sanity-check view of new runs.
+
+## Development notes
+
+The substantive research decisions in this project — what to measure, what
+constitutes a fair test, how much survivorship bias the headline contains,
+which limitations are honest to ship with — are the author's. The
+*engineering* side of the project (test scaffolding, CI configuration,
+package layout, refactors, the bridge from "this is the idea I want to test"
+to "here is a clean, reproducible implementation") was developed in heavy
+collaboration with Claude Code. Specifically:
+
+- The walk-forward harness, prediction store, and dashboard scaffold were
+  designed and iterated in conversation with Claude Code.
+- Test coverage (leakage tests, PIT-membership tests, contract tests on the
+  loaders, ticker-resolver tests) was co-designed; Claude Code drafted many
+  of the test cases that then surfaced bugs in the implementation.
+- The GitHub Actions CI pipeline (ruff + pyright + pytest on Python 3.11)
+  and pre-commit hooks were set up with Claude Code.
+- Code review, refactors, and a final pre-publish audit pass were performed
+  in collaboration with Claude Code.
+
+Treat this README, the experiment configs, and the four-stage narrative as
+the author's claims; treat the engineering quality of the surrounding
+codebase as a product of that collaboration.
 
 ## Citations
 
