@@ -39,3 +39,6 @@ Thumbs.db
 # Notebooks
 .ipynb_checkpoints/
 logs/
+
+# Duplicate yfinance cache that gets written when notebooks run with notebooks/ as cwd
+notebooks/data/
