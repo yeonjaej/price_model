@@ -4,10 +4,11 @@ A point-in-time (PIT) corrected cross-sectional equity return predictor on the S
 
 ## Executive summary
 
-Out-of-sample **Information Coefficient = +0.0183 (t = +4.3)** and long-short
-**Sharpe = +0.86** are obtained over 905 trading days in the post-October-2022
-high-dispersion regime, on a Wikipedia-reconstructed point-in-time 617-name
-historical universe. The model uses 22 features:
+Out-of-sample **Information Coefficient = +0.0183 (t = +4.3)** and
+long-short **Sharpe = +0.86** are obtained over 905 trading days in the
+post-October-2022 high-dispersion regime, on a Wikipedia-reconstructed
+point-in-time universe of 617 historical S&P 500 tickers. The model uses
+22 features:
 
 - 13 technical baselines.
 - Three documented academic anomalies (Jegadeesh-Titman 12-1 momentum,
@@ -17,22 +18,68 @@ historical universe. The model uses 22 features:
   intraday range, intraday body).
 
 The result is statistically significant, regime-conditional, and **not
-deployable for retail investors** after transaction costs, taxes, and breadth
-limits — see [Scope and limitations](#scope-and-limitations).
+deployable for retail investors** after transaction costs, taxes, and
+breadth limits. The numbers above are bounded by free-data quality and
+methodological choices that are enumerated explicitly — see
+[Data quality and methodological limitations](#data-quality-and-methodological-limitations)
+and [Scope and limitations](#scope-and-limitations).
 
 ### Metric definitions
 
-- **Information Coefficient (IC).** Per-date Spearman rank correlation
-  between predicted and realized 5-day forward excess returns, averaged
-  across all dates in the evaluation window. Measures cross-sectional
-  ranking quality. IC ∈ [−1, +1]; on liquid US large-caps, +0.02 with
-  t-stat > 2 is considered a credible edge.
-- **t-stat of IC.** `mean(daily IC) / (stdev(daily IC) / √n_dates)`. Tests
-  whether the mean IC is distinguishable from zero. |t| > 1.96 corresponds
-  to p < 0.05.
+- **Information Coefficient (IC).** Cross-sectional ranking quality of
+  the model, averaged over time.
+
+  *Per-date IC.* On each date `t` in the evaluation window, the model
+  produces a prediction for every ticker in the cross-section that has a
+  realized 5-day forward excess return available. Let `N_t` be the number
+  of such tickers on date `t` — in the present universe `N_t` is on the
+  order of 300-600. The per-date IC is the Spearman rank correlation
+  between two vectors **of length N_t**: the vector of predictions and the
+  vector of realized 5-day forward excess returns. Note that the vectors
+  are not length 5; the "5" refers to the *horizon* of the return target,
+  not the number of observations.
+
+  *Time-averaged IC.* The reported IC is the unweighted average of the
+  per-date ICs across all evaluation dates (`n_dates = 1758` full sample,
+  `n_dates = 905` post-October-2022). A weak ranker on most days plus one
+  strong day does not produce a high IC; consistent ranking is required.
+
+  *Worked example.* On a hypothetical date with `N_t = 5` tickers,
+  suppose the model's predictions and the realized 5-day forward excess
+  returns are:
+
+  | Ticker | Prediction | Pred rank | Realized | Realized rank |
+  |---|---|---|---|---|
+  | AAA | +0.020 | 5 | +0.030 | 5 |
+  | BBB | +0.010 | 4 | +0.005 | 3 |
+  | CCC | +0.000 | 3 | +0.012 | 4 |
+  | DDD | −0.005 | 2 | −0.001 | 2 |
+  | EEE | −0.015 | 1 | −0.020 | 1 |
+
+  The rank vectors are `[5, 4, 3, 2, 1]` and `[5, 3, 4, 2, 1]`. The
+  Spearman correlation (Pearson correlation of ranks) is:
+
+  `ρ = 1 − (6 × Σ d²) / (N × (N² − 1))`
+  ` = 1 − (6 × (0² + 1² + 1² + 0² + 0²)) / (5 × 24) = 1 − 12/120 = 0.90`
+
+  So the per-date IC on this hypothetical date is **+0.90**. Perfect
+  ranking would give +1.0; perfect mis-ranking would give −1.0;
+  independent ranking would give roughly 0. The reported full-sample IC
+  of +0.0055 is therefore the **average over 1,758 such daily
+  correlations**, each computed across ~300-600 tickers.
+
+  *Interpretation benchmarks.* On liquid US large-caps, IC = +0.02 with
+  t-stat > 2 is considered a credible edge. IC ≈ +0.10 would be
+  exceptional; IC > +0.20 is not realistic out-of-sample.
+
+- **t-stat of IC.** `mean(per-date IC) / (stdev(per-date IC) / √n_dates)`.
+  Tests whether the mean IC is distinguishable from zero against the
+  null hypothesis that per-date ICs are sampled from a distribution
+  centered at zero. |t| > 1.96 corresponds to p < 0.05.
 - **Long-short Sharpe.** Annualized Sharpe ratio of a daily-rebalanced
-  portfolio that is long the top-quintile predicted names (top 20%) and
-  short the bottom-quintile (bottom 20%), equal-weighted within each leg.
+  portfolio that is long the top-quintile predicted tickers (top 20%)
+  and short the bottom-quintile (bottom 20%), equal-weighted within each
+  leg.
   The quintile cut is set in code by `_long_short_returns(top_frac=0.2)`
   in `src/price_model/eval/metrics.py`. Sharpe is computed per-horizon and
   annualized as `mean(per-horizon return) / stdev(per-horizon return) ×
@@ -40,57 +87,98 @@ limits — see [Scope and limitations](#scope-and-limitations).
   institutional tradeability; values reported here are gross of all
   transaction costs.
 
-## Headline result: ablation analysis
+## Primary result: ablation analysis
 
-The headline result is **+0.0183 IC (t = +4.34) on the 617-name PIT
-universe with 22 features, post-October-2022**. To establish that this is
-not an artifact of any single confounder, three independent dimensions are
-varied — universe (with and without point-in-time correction), feature
-set, and time window — and all six cells of the resulting 2×3 matrix are
-reported on the strongest feature set included in the project.
+The primary out-of-sample estimate is **IC = +0.0183 (t = +4.34) on the
+617-ticker PIT-corrected universe with 22 features, post-October-2022**.
+To establish that this estimate is not an artifact of any single
+confounder, three independent dimensions are varied — universe (with and
+without point-in-time correction), feature set, and time window — and
+all six cells of the resulting 2×3 matrix are reported on the strongest
+feature set included in the project.
 
-The presentation order below is *not* the chronological order in which the
-project was constructed. The chronological build proceeded from
+The presentation order below is *not* the chronological order in which
+the project was constructed. The chronological build proceeded from
 technical-baseline → PIT-corrected → anomalies → OHLCV completeness; that
 history is preserved in the git log. The ablation table is the
 methodologically preferred ordering: one effect is isolated at a time on
 the 22-feature model, rather than mixing "changed the universe" with
 "changed the feature set" in the same step.
 
+### What "PIT correction" means in this project
+
+**Point-in-time (PIT) correction** restricts the cross-section evaluated
+on each date `t` to tickers that were *actually members of the S&P 500
+index on date `t`* — not the tickers that *are* members today. The
+correction defends against survivorship bias: today's S&P 500 list
+disproportionately contains companies that survived, by selection. A
+backtest evaluated on today's list silently assumes the model would have
+"known" in 2018 to focus on the 2026 survivors.
+
+The mechanics are isolated in two modules:
+
+- `src/price_model/data/sources/sp500_membership.py` scrapes the
+  Wikipedia "List of S&P 500 companies" page and its "Selected changes"
+  table to reconstruct, for every ticker that has ever been in the
+  index between 2014 and the present, an `(added_date, removed_date)`
+  membership window.
+- `src/price_model/data/membership.py::filter_panel_to_pit(panel)`
+  takes the long-format `(date, ticker, ...)` price panel and drops
+  every row whose `(date, ticker)` pair falls *outside* that ticker's
+  membership window. A stock added to the index on 2020-06-22 therefore
+  contributes only its post-2020-06-22 rows to training and evaluation;
+  a stock removed on 2019-04-30 contributes only its pre-2019-04-30
+  rows; a stock that joined in 2018 and left in 2022 contributes only
+  the rows for dates between those events.
+
+When `pit_filter=True` is passed to `load_panel(...)`, the membership
+filter is applied immediately after the yfinance fetch and before
+features or targets are constructed. The walk-forward harness then
+trains and evaluates only on the PIT-filtered cross-section. When
+`pit_filter=False`, the model sees today's universe back-projected
+across all dates — the "subset" column of the matrix below.
+
+The PIT correction in this project is partial because yfinance is
+missing data for ~12% of historical S&P 500 tickers (SIVB, FRC, ATVI,
+etc.; see [Data quality and methodological limitations](#data-quality-and-methodological-limitations)).
+A truly bias-free PIT analysis requires a paid feed.
+
 ### Universe × PIT × regime ablation (22-feature model)
 
-| | Subset universe (160 modern survivors, PIT OFF) | Headline universe (617 historical, PIT ON) |
+| | Subset universe (160 modern-survivor tickers, PIT OFF) | PIT-corrected universe (617 historical tickers, PIT ON) |
 |---|---|---|
 | **Full sample** (1758 dates) | IC = +0.0142, t = +4.05, Sharpe = +0.39 | IC = +0.0055, t = +1.51, Sharpe = +0.21 |
 | **Pre-Oct-2022** (853 dates) | IC = +0.0034, t = +0.64, Sharpe = −0.07 | IC = −0.0082, t = −1.38, Sharpe = −0.16 |
-| **Post-Oct-2022** (905 dates) | IC = +0.0244, t = +5.37, Sharpe = +0.94 | **IC = +0.0183, t = +4.34, Sharpe = +0.86** ← headline |
+| **Post-Oct-2022** (905 dates) | IC = +0.0244, t = +5.37, Sharpe = +0.94 | **IC = +0.0183, t = +4.34, Sharpe = +0.86** ← primary estimate |
 
 Three observations follow.
 
 **1. Survivorship-bias collapse varies sharply by regime.** Across rows:
 full-sample IC collapses from +0.0142 to +0.0055 under PIT correction
 (a **61% reduction**); pre-October-2022 IC **flips sign** from a noisy
-+0.0034 to a clear −0.0082; post-October-2022 IC collapses only 25% (from
-+0.0244 to +0.0183). Survivorship bias dominates when the underlying
-signal is weak (pre-2022 noise) and contributes far less when the signal
-is strong (post-2022 regime). A practitioner running the
++0.0034 to a clear −0.0082; post-October-2022 IC collapses only 25%
+(from +0.0244 to +0.0183). Survivorship bias dominates when the
+underlying signal is weak (pre-2022 noise) and contributes far less when
+the signal is strong (post-2022 regime). A practitioner running the
 subset / full-sample backtest would observe +0.0142 IC at t = 4.05 and
-infer a credible statistically significant edge, 61% of which is selection
-bias.
+infer a credible statistically significant edge, 61% of which would be
+selection bias.
 
 **2. The regime effect is large and robust to universe.** Down columns:
 both universes show comparable regime shifts in Sharpe (subset:
-−0.07 → +0.94; PIT: −0.16 → +0.86). The post-October-2022 regime contains
-real cross-sectional signal that is not primarily a survivorship artifact.
-The IC magnitudes shift similarly (subset: +0.0034 → +0.0244, roughly 7×;
-PIT: −0.0082 → +0.0183, further amplified by the sign flip).
+−0.07 → +0.94; PIT: −0.16 → +0.86). The post-October-2022 regime
+contains real cross-sectional signal that is not primarily a
+survivorship artifact. The IC magnitudes shift similarly (subset:
++0.0034 → +0.0244, roughly 7×; PIT: −0.0082 → +0.0183, further amplified
+by the sign flip).
 
 **3. Pre-October-2022 IC on the PIT universe is negative with t = −1.38.**
-The 22-feature model would have actively lost on the cross-section before
-the regime break, not merely been flat. The finding is sharper than "the
-edge is concentrated post-2022": the edge is post-2022 *and* the opposite
-disedge is pre-2022. The features behave as a regime-conditional
-intensifier, amplifying whichever direction the cross-section is paying.
+The 22-feature model would have actively lost on the cross-section
+before the regime break, not merely been flat. The finding is sharper
+than "the edge is concentrated post-2022": the edge is post-2022 *and*
+the opposite disedge is pre-2022. The features behave as a
+regime-conditional intensifier, amplifying whichever direction the
+cross-section is paying.
 
 ### Feature-set ablation
 
@@ -125,30 +213,30 @@ A checked-in static list of 160 modern-survivor tickers at
 `src/price_model/data/universes/sp500.txt`. The name `sp500` is a misnomer
 retained for backwards compatibility with existing experiment configs: the
 file is *not* the full historical S&P 500 but a modern-survivor subset
-(no delisted or acquired names, no PIT membership applied). No
+(no delisted or acquired tickers, no PIT membership applied). No
 `build-universe` step is needed; the file is checked in. Only the price
 fetch is required:
 
 ```bash
-# Fetch yfinance daily bars for the 160 subset names (~5-10 min cold)
+# Fetch yfinance daily bars for the 160 subset tickers (~5-10 min cold)
 python -m price_model.cli refresh-data --universe sp500 --start 2017-01-01
 ```
 
-**Universe B — `sp500_pit` (the PIT-corrected headline universe).**
+**Universe B — `sp500_pit` (the PIT-corrected primary universe).**
 Wikipedia-reconstructed historical universe with point-in-time membership
 applied at backtest time. The membership table and tickers list are
 generated by the build step, then yfinance data is fetched for all
-resolving names:
+resolving tickers:
 
 ```bash
 # Scrape Wikipedia for historical S&P 500 components and write the universe
 python -m price_model.cli build-universe --name sp500_pit --start 2017-01-01
 
-# Fetch yfinance data for all ~700 names that resolve (~10-15 min cold)
+# Fetch yfinance data for all ~700 tickers that resolve (~10-15 min cold)
 python -m price_model.cli refresh-data --universe sp500_pit --start 2017-01-01
 ```
 
-### Step 1 — the two headline runs
+### Step 1 — the two primary runs
 
 The 2×3 ablation matrix is filled by two backtest runs. Each populates one
 column; rows are obtained by time-splitting the predictions.
@@ -167,7 +255,7 @@ python -m price_model.cli run -e extended_kaggle_v2_ohlcv_subset
 
 ```bash
 jupyter notebook notebooks/03_robustness.ipynb
-# PIT model    post-October-2022:  IC = +0.0183, Sharpe = +0.86, t ≈ +4.34  ← headline
+# PIT model    post-October-2022:  IC = +0.0183, Sharpe = +0.86, t ≈ +4.34  ← primary estimate
 # PIT model    pre-October-2022:   IC = -0.0082, Sharpe = -0.16
 # Subset model post-October-2022:  IC = +0.0244, Sharpe = +0.94, t ≈ +5.37
 # Subset model pre-October-2022:   IC = +0.0034, Sharpe = -0.07
@@ -188,15 +276,16 @@ Small drift (< 5%) is expected as yfinance updates and the Ken French
 factor file refreshes monthly.
 ## Data quality and methodological limitations
 
-The headline result is honest *about what it measures*, but what it
-measures is bounded by the data available without a paid feed. This
-section enumerates those boundaries.
+The primary out-of-sample estimate is honest about what it measures,
+but what it measures is bounded by the data available without a paid
+feed. This section enumerates those boundaries.
 
 ### Limitations of yfinance
 
 yfinance is the only free source of daily-bar US equity data and is the
 reason the project is reproducible without a paid subscription. It has
-three documented failure modes that materially affect the headline.
+three documented failure modes that materially affect the reported
+results.
 
 1. **Delisted-ticker history is permanently lost.** When a company is
    acquired, fails, or goes private, yfinance stops returning data for
@@ -268,9 +357,9 @@ Each entry carries a one-line comment identifying the corporate event and
 the rationale for inclusion. New entries are added when new failures are
 observed.
 
-### Sources of upward bias in the headline
+### Sources of upward bias in the primary estimate
 
-The headline IC of +0.0183 should be interpreted with the following
+The primary IC of +0.0183 should be interpreted with the following
 caveats.
 
 1. **PIT correction is partial.** Because yfinance does not return data
@@ -291,17 +380,18 @@ caveats.
    was an 89% collapse (+0.0075 → +0.0008); weaker feature sets exhibit
    higher survivorship-bias inflation.
 3. **The post-2022 regime contains the bank-failure period (March-May
-   2023).** The headline +0.0183 IC over 905 days post-October-2022 is
-   computed on a cross-section that excludes the names that
-   catastrophically failed in that window. A real-world model would need
-   to predict (or fail to predict) those failures; the present model
-   does not face that test. The accurate framing of the headline is
-   "+0.0183 on the survivors of the regime, given the available data."
+   2023).** The reported +0.0183 IC over 905 days post-October-2022 is
+   computed on a cross-section that excludes the tickers that
+   catastrophically failed in that window. A real-world model would
+   need to predict (or fail to predict) those failures; the present
+   model does not face that test. The accurate framing of the reported
+   IC is "+0.0183 on the survivors of the regime, given the available
+   data."
 4. **Transaction costs, taxes, and slippage are zero in the backtest.**
    All ICs and Sharpes assume costless rebalancing. A retail investor
    faces bid-ask spreads (~5-10 bp), commissions, capital-gains tax, and
    slippage; the reported Sharpe of +0.86 is gross. After realistic
-   retail costs, the after-cost Sharpe on a 10-30 name portfolio
+   retail costs, the after-cost Sharpe on a 10-30 ticker portfolio
    approaches zero. An institutional desk paying ~1-3 bp all-in could
    plausibly net a Sharpe in the 0.4-0.6 range from this signal, which
    would not constitute a standalone strategy.
@@ -316,7 +406,7 @@ Listed in approximate order of effort:
 
 - **Replace yfinance with Norgate Premium Data (~$60 / month)** for
   survivorship-bias-free prices including delisted history. All five IC
-  numbers would change; the headline +0.0183 would likely fall by
+  numbers would change; the primary +0.0183 IC would likely fall by
   0.002-0.005, but the regime-conditional shape (post-2022 strong,
   pre-2022 negative) is expected to persist.
 - **Replace the Wikipedia membership source with CRSP** (paid; free
@@ -331,7 +421,7 @@ Listed in approximate order of effort:
 
 - **Not deployable for retail trading.** After bid-ask spreads,
   commissions, and capital-gains taxes, the +0.0183 IC and gross Sharpe
-  of +0.86 yield an after-cost edge close to zero for a 10-30 name
+  of +0.86 yield an after-cost edge close to zero for a 10-30 ticker
   portfolio (breadth too small) rebalanced quarterly (turnover too low).
   The result is institutional-grade gross, not retail-grade net.
 - **Not a guarantee that future regimes will resemble the post-2022 one.**
@@ -386,16 +476,18 @@ prediction store. It exists to allow the model's daily output to be
 inspected visually (per-date top / bottom quintile, rolling IC,
 prediction vs. realized scatter) without writing a notebook for each
 inspection. The dashboard is a debugging and monitoring surface, not
-part of the reproduction workflow. None of the headline numbers in this
-README originate from the dashboard, and skipping it does not affect
-reproduction of any ablation cell. The dashboard is most useful when
-extending the model and requires a quick sanity-check view of new runs.
+part of the reproduction workflow. None of the reported numbers in
+this README originate from the dashboard, and skipping it does not
+affect reproduction of any ablation cell. The dashboard is most useful
+when extending the model and a quick sanity-check view of new runs is
+desired.
 
 ## Development notes
 
 The substantive research decisions in this project — what to measure,
-what constitutes a fair test, how much survivorship bias the headline
-contains, which limitations are honest to ship with — are the author's.
+what constitutes a fair test, how much survivorship bias the primary
+estimate contains, which limitations are honest to ship with — are the
+author's.
 The engineering side of the project (test scaffolding, CI configuration,
 package layout, refactors, and the translation from research intent to
 reproducible implementation) was developed in close collaboration with
