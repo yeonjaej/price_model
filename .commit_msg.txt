@@ -1,59 +1,44 @@
-docs: update headline to Stage 5 (OHLCV regime) — IC +0.0183, Sharpe +0.86
+docs(readme): tone pass — academic, professional, concise
 
-The OHLCV/volume completeness batch produced a real improvement on the
-post-October-2022 regime split. Update the README headline, journey
-table, reproduction commands, data-quality discussion, honest-scope
-section, and notebook 00 expected values to reflect the new five-stage
-story.
+Convert first-person constructions to passive voice or third-person
+throughout. No "we", "our", "I", or "you" addressing the reader. All
+numbers, claims, code references, and the ablation matrix preserved.
 
-New headline (was: IC +0.0116, t +2.5, Sharpe +0.52 — anomaly regime):
-  IC = +0.0183, t = +4.34, Sharpe = +0.86 over 905 days post-October-2022.
+Section-level changes:
 
-Five-stage journey table:
-  1. Subset universe (160, no PIT) ........ IC +0.0075, t +2.49, Sharpe +0.28
-  2. PIT-corrected (617, technical) ....... IC +0.0008, t +0.24, Sharpe -0.04
-  3. + 3 academic anomalies ............... IC +0.0033, t +0.96, Sharpe +0.083
-  4. + 6 OHLCV/volume features ............ IC +0.0055, t +1.51, Sharpe +0.21
-  5. Stage 4 post-October-2022 regime ..... IC +0.0183, t +4.34, Sharpe +0.86
+- "Executive Summary" → "Executive summary" (sentence-case heading
+  convention) and the bullets cleaned up to consistent academic phrasing.
+- "How the headline was earned — three orthogonal ablations" →
+  "Headline result: ablation analysis". Body rewritten to passive /
+  third-person; intent unchanged.
+- "Subset universe, PIT ablation (22-feature model)" →
+  "Universe × PIT × regime ablation (22-feature model)" (more accurate
+  description of the matrix axes).
+- "Three independent readings fall out of this" → "Three observations
+  follow". Bullets reworded with measured academic register
+  ("A practitioner running ... would observe ... and infer a credible
+  edge ...") rather than rhetorical asides.
+- "Reproduce the ablations" → "Reproduction". Stage commands trimmed
+  and the orphaned HTML comment about the chronological build was
+  dropped (the same content now lives elsewhere in less obtrusive form).
+- "Data quality and methodological limitations": meta-sentences
+  removed ("This is the section I'd want any reviewer to read"). The
+  yfinance limitations enumeration retained verbatim aside from
+  rephrasing ownership ("our drop list" → "the project drop list").
+- "Upward bias due to data limitations" → "Sources of upward bias in
+  the headline". All five caveats rephrased in declarative academic
+  voice. The single-window caveat now states "A multi-window
+  robustness check has not been performed" rather than "I didn't run".
+- "What would need to change to deliver a *true* PIT-correct number"
+  → "Toward a fully PIT-correct evaluation".
+- "Honest scope — what this is NOT" → "Scope and limitations".
+- "On the Streamlit dashboard" → "Streamlit dashboard".
+- "Development notes": Claude Code attribution preserved. Light prose
+  cleanup; "Treat this README ... as the author's claims" remains as
+  the closing line but in third-person form.
+- Headings normalized to sentence-case.
 
-Honest framings preserved or sharpened:
-
-- The OHLCV batch is a regime-conditional INTENSIFIER, not a universally
-  beneficial set. Pre-October-2022 IC went from -0.0055 (anomaly stage)
-  to -0.0082 (OHLCV stage). The "all the edge is in one regime" story
-  has gotten sharper, not softer. This is called out in both the journey
-  deltas and the honest-scope section.
-
-- Full-sample t = 1.51 is still BELOW the |t| > 1.96 significance bar.
-  Only the regime-split number (t = 4.34) is statistically significant.
-  The README says this explicitly.
-
-- Sharpe of +0.86 is GROSS — close to but still below the +1.0
-  "would actually trade this institutionally" bar. Honest-scope section
-  updates the after-cost discussion: an institutional desk paying 1-3bp
-  could net Sharpe ~0.4-0.6; a retail investor nets ~0 after costs and
-  breadth/turnover limits. "Institutional-grade gross, not retail-grade
-  net" is the new framing.
-
-- Old anomaly-only regime result (+0.0116, +2.50, +0.52) is retained as
-  a historical-reference note under the table so the OHLCV-vs-anomaly
-  delta is visible to the reader. The "anomaly batch produced X, OHLCV
-  batch lifted it by ~60%" comparison is now part of the journey
-  narrative.
-
-Notebook 00 changes (notebooks/00_reproduce_headline.ipynb):
-
-- EXPECTED dict gains stage_4_ohlcv (full sample of OHLCV model) and
-  stage_5_ohlcv_regime (post-Oct-2022 split of OHLCV predictions).
-  Old stage_4_regime entry (anomaly regime) is removed since it's no
-  longer the headline.
-- Verify special-case in cell 5 updated to compute the time-split for
-  stage_5_ohlcv_regime.
-- Markdown table at the top updated to the five-stage version.
-- Prerequisites checklist gains `cli run -e extended_kaggle_v2_ohlcv`.
-- Final-summary message updated to reference the new 5-stage journey.
-- Stale outputs cleared so the next run will validate against new
-  expected values.
-
-Lint clean, format clean, 59 tests passing. No source code changes in
-this commit.
+Final state: no instances of we / our / I / you remain in the README
+(other than the country code "US"). No source code changes; 91 tests
+passing on the local-runnable subset (test_store has a pre-existing
+unrelated collection error on the sandbox-only Python 3.10).
