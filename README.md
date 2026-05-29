@@ -4,11 +4,14 @@ Point-in-time-corrected cross-sectional equity return predictor on the S&P 500.
 
 ## Headline result
 
-Out-of-sample **Information Coefficient = +0.0116 (t = +2.5)** and long-short
-**Sharpe = +0.52** over 905 trading days in the post-October-2022 high-dispersion
+Out-of-sample **Information Coefficient = +0.0183 (t = +4.3)** and long-short
+**Sharpe = +0.86** over 905 trading days in the post-October-2022 high-dispersion
 regime, on a Wikipedia-reconstructed point-in-time 617-name historical universe
-with three documented academic anomaly features (Jegadeesh-Titman 12-1 momentum,
-Hong-Lim-Stein 52-week high, Lehmann 1-day reversal).
+using a 22-feature model that combines technical baselines, three documented
+academic anomalies (Jegadeesh-Titman 12-1 momentum, Hong-Lim-Stein 52-week high,
+Lehmann 1-day reversal), and six OHLCV/volume features (Parkinson high-low
+volatility, Bali-Cakici-Whitelaw MAX effect, dollar volume, abnormal turnover,
+intraday range, intraday body).
 
 The result is statistically significant, regime-conditional, and **not deployable
 for retail investors** after transaction costs, taxes, and breadth limits —
@@ -44,15 +47,29 @@ the lesson.
 | 1. Subset universe | 160 modern survivors | OFF | 13 technical | +0.0075 | +2.49 | +0.28 |
 | 2. PIT-corrected | 617 historical | ON | 13 technical | +0.0008 | +0.24 | -0.04 |
 | 3. Anomaly-augmented | 617 historical | ON | 13 + 3 academic anomalies | +0.0033 | +0.96 | +0.083 |
-| 4. **Regime split of stage 3** | 617 historical, post-Oct-2022 only | ON | 16 | **+0.0116** | **+2.50** | **+0.52** |
+| 4. OHLCV completeness | 617 historical | ON | 16 + 6 OHLCV/volume | +0.0055 | +1.51 | +0.21 |
+| 5. **Regime split of stage 4** | 617 historical, post-Oct-2022 only | ON | 22 | **+0.0183** | **+4.34** | **+0.86** |
 
 Reading the deltas:
 - **Stage 1 → Stage 2:** universe expansion + point-in-time membership correction
   collapsed IC by **89%**. Most of the naive result was selection bias.
 - **Stage 2 → Stage 3:** adding three documented academic anomalies partially
   restored IC and flipped Sharpe positive.
-- **Stage 3 → Stage 4:** the recovered edge is concentrated in the
-  post-October-2022 regime; pre-2022 IC is slightly negative.
+- **Stage 3 → Stage 4:** adding six OHLCV/volume features (intraday range,
+  Parkinson vol, dollar volume, abnormal turnover, MAX effect) lifted full-
+  sample IC by another ~67%. Full-sample t = 1.51 is still below the
+  conventional |t| > 1.96 significance bar; the edge wasn't durable on the
+  pooled cross-section alone.
+- **Stage 4 → Stage 5:** the regime split is where the OHLCV batch pays off
+  most. Post-October-2022 IC reaches +0.0183 (t = +4.34, strongly
+  significant) with Sharpe +0.86. Pre-October-2022 IC is **−0.0082** — the
+  OHLCV features are a *regime-conditional intensifier*: they amplify the
+  post-2022 edge but they also amplify the pre-2022 disedge. The honest
+  story has gotten sharper, not softer.
+
+For reference, the same regime split run on the Stage 3 (anomaly-only) model
+produced IC = +0.0116, t = +2.50, Sharpe = +0.52. The OHLCV batch lifted all
+three metrics by roughly 60%.
 
 ## Reproduce the journey
 
@@ -114,12 +131,20 @@ python -m price_model.cli run -e extended_kaggle_v2_anomaly
 # IC ≈ +0.0033, t ≈ +0.96, Sharpe ≈ +0.083 — partial recovery.
 ```
 
-### Stage 4 — regime split (analyze stage 3 predictions)
+### Stage 4 — adding OHLCV / volume completeness features
+
+```bash
+python -m price_model.cli run -e extended_kaggle_v2_ohlcv
+# IC ≈ +0.0055, t ≈ +1.51, Sharpe ≈ +0.21 — further recovery,
+# still below |t| > 1.96 on the full pooled sample.
+```
+
+### Stage 5 — regime split (analyze stage 4 predictions)
 
 ```bash
 jupyter notebook notebooks/03_robustness.ipynb
-# Post-October-2022:  IC = +0.0116, Sharpe = +0.52, t ≈ +2.5  ← headline
-# Pre-October-2022:   IC = -0.0055, Sharpe = -0.16
+# Post-October-2022:  IC = +0.0183, Sharpe = +0.86, t ≈ +4.34  ← headline
+# Pre-October-2022:   IC = -0.0082, Sharpe = -0.16
 ```
 
 Expected numbers above are deterministic given the same data snapshot. Small drift
@@ -208,7 +233,7 @@ are added when new failures are observed.
 ### How these limitations bias the headline upward
 
 This is the section I'd want any reviewer of this project to read. Be skeptical
-of the headline IC of +0.0116 in proportion to the following:
+of the headline IC of +0.0183 in proportion to the following:
 
 1. **The "PIT correction" is partial.** Because yfinance can't give us SIVB,
    FRC, ATVI, AGN, etc., those tickers don't appear in our PIT panel even
@@ -223,17 +248,20 @@ of the headline IC of +0.0116 in proportion to the following:
    Our IC drop from +0.0075 to +0.0008 is the *floor*, not the ceiling, of
    how much the naive backtest was inflated.
 3. **The post-2022 regime contains the bank-failure period (Mar-May 2023).**
-   Our headline +0.0116 IC over 905 days post-October-2022 is computed on a
+   Our headline +0.0183 IC over 905 days post-October-2022 is computed on a
    cross-section that excludes the names that catastrophically failed in
    that window. A real-world model would have to predict (or fail to
    predict) those failures; our model gets a free pass on them. **The
-   honest read of the headline IC is "+0.0116 on the survivors of the
+   honest read of the headline IC is "+0.0183 on the survivors of the
    regime, given our data."**
 4. **Transaction costs, taxes, slippage are zero in the backtest.** All
    ICs and Sharpes assume costless rebalancing. A retail investor faces
    bid-ask spreads (~5-10bp), commissions, capital-gains tax, and
-   slippage. After realistic costs, the +0.0116 IC produces approximately
-   zero after-cost Sharpe for portfolios under ~$1M.
+   slippage. The reported Sharpe of +0.86 is *gross*; net of realistic
+   retail costs, the after-cost Sharpe on a 10-30 name portfolio is
+   approximately zero. An institutional desk paying ~1-3bp all-in could
+   plausibly net a Sharpe in the 0.4-0.6 range from this signal — still
+   not a standalone strategy.
 5. **Single random seed for the universe expansion.** We chose the
    2017-2026 evaluation window because that's what yfinance comfortably
    covers. Different windows (2010-2020 vs. 2017-2026 vs. 2020-2026) would
@@ -245,8 +273,9 @@ of the headline IC of +0.0116 in proportion to the following:
 In rough order of effort:
 
 - **Replace yfinance with Norgate Premium Data ($60/mo)** for survivorship-bias-free
-  prices including delisted history. Would change all four IC numbers; the
-  headline +0.0116 would likely fall by 0.001-0.003.
+  prices including delisted history. Would change all five IC numbers; the
+  headline +0.0183 would likely fall by 0.002-0.005, but the regime-
+  conditional shape (post-2022 strong, pre-2022 negative) would persist.
 - **Replace the Wikipedia membership source with CRSP** (paid, academic access
   free for most affiliated researchers). Cleaner pre-2014 history, no scrape
   fragility.
@@ -257,13 +286,17 @@ In rough order of effort:
 ## Honest scope — what this is NOT
 
 - **Not deployable for retail trading.** After bid-ask spreads, commissions,
-  and capital-gains taxes, the +0.0116 IC produces approximately zero
-  after-cost edge for an individual investor's 10-30 name portfolio (breadth
-  too small) rebalanced quarterly (turnover too low).
+  and capital-gains taxes, the +0.0183 IC and gross Sharpe of +0.86 produce
+  approximately zero after-cost edge for an individual investor's 10-30
+  name portfolio (breadth too small) rebalanced quarterly (turnover too
+  low). The number is institutional-grade *gross*, not retail-grade *net*.
 - **Not a guarantee future regimes will look like the post-2022 one.** The
   edge is concentrated in a single regime (Oct 2022 → May 2026) characterized
   by Mag-7 dominance, rate-cycle dispersion, and AI-driven sector divergence.
-  The same model on pre-2022 data produces IC = -0.006.
+  The same 22-feature model on pre-2022 data produces IC = **−0.0082** —
+  the OHLCV/anomaly features are *regime-conditional intensifiers*, not
+  universally beneficial. Adding them post-2022 lifts IC by ~58%; adding
+  them pre-2022 makes IC ~50% more negative.
 - **Not a substitute for index funds.** For individual investors, decades of
   research show low-cost diversified index funds beat almost all active
   strategies after fees and taxes.
