@@ -22,7 +22,7 @@ features:
   - vol_20
   - rsi_14
   - distance_ma_200
-  - momentum_60_sector_rel
+  #- momentum_60_sector_rel
   - idio_vol_20
   - momentum_60_rank
   - vol_20_rank
@@ -53,14 +53,14 @@ models:
     class: LightGBMModel
     params:
       learning_rate: 0.02
-      num_leaves: 128
+      num_leaves: 64
       min_data_in_leaf: 200
       feature_fraction: 0.7
       bagging_fraction: 0.7
       bagging_freq: 5
       lambda_l1: 0.1
       lambda_l2: 5.0
-      n_estimators: 2000
+      n_estimators: 1000
       val_fraction: 0.1
       early_stopping_rounds: 100
-      seeds: [42, 2024, 12345, 99, 420]
+      seeds: [42, 2024, 12345]
