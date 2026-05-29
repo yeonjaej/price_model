@@ -1,0 +1,92 @@
+# OHLCV / volume completeness pass on top of the anomaly-augmented config.
+#
+# What's new vs extended_kaggle_v2_anomaly:
+#   + range_ratio          (high - low) / close — within-day vol proxy
+#   + body_ratio           |open - close| / close — within-day directional body
+#   + parkinson_vol_20     20d Parkinson high-low vol estimator
+#   + log_dollar_volume    log(close * volume) — liquidity proxy
+#   + abnormal_volume      volume / mean_20(volume), split-adjusted
+#   + max_return_21d       Bali-Cakici-Whitelaw MAX effect
+#
+# Hypothesis: a reviewer who has done price modeling would call the
+# anomaly-only feature set incomplete — it leaves the day-bar's high/low/
+# open/volume unused. This config adds the six obviously-missing features
+# in a single batch on top of v2_anomaly. The comparison isolates the OHLCV
+# effect; everything else (universe, PIT, hyperparams, walk-forward) is
+# identical to extended_kaggle_v2_anomaly.
+#
+# Expected direction: IC should move up modestly. Parkinson and MAX are
+# well-documented incremental signals on liquid US equities. Volume features
+# carry weaker signal on a curated universe but should not hurt. The
+# downside risk is feature redundancy: vol_20 / vol_ewm_20 / parkinson_vol_20
+# all measure vol, so the tree may waste split capacity on near-duplicates.
+# If that happens, IC could move down by 0.001-0.002 from feature noise.
+# Either outcome is an honest finding worth reporting.
+#
+# Hyperparameters match v2_anomaly and v2_pit exactly so the comparison
+# isolates the FEATURE effect, not model capacity.
+
+experiment_id: extended_kaggle_v2_ohlcv
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true                # PIT correction stays ON — honest IC
+
+features:
+  # Existing v2 features (10)
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  # - momentum_60_sector_rel       # disabled — sector map only covers 156 names
+  - idio_vol_20
+  - momentum_60_rank
+  - vol_20_rank
+  - distance_ma_200_rank
+  - vol_ewm_20
+  - vol_20_cs_min_dist
+  - mom60_minus_dist_ma200
+  # Academic anomalies (3) — already in extended_kaggle_v2_anomaly
+  - momentum_12_1
+  - distance_52w_high
+  - return_1d
+  # NEW OHLCV / volume / MAX-effect batch (6) — the hypothesis under test
+  - range_ratio
+  - body_ratio
+  - parkinson_vol_20
+  - log_dollar_volume
+  - abnormal_volume
+  - max_return_21d
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_ohlcv
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v2_ohlcv
+    class: LightGBMModel
+    params:
+      # Identical to v2_pit / v2_anomaly so the comparison isolates the
+      # feature effect, not model capacity.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]
