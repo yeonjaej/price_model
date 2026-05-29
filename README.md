@@ -25,9 +25,12 @@ for retail investors** after transaction costs, taxes, and breadth limits —
   whether the mean IC is distinguishable from zero. |t| > 1.96 corresponds
   to p < 0.05 (5% significance).
 - **Long-short Sharpe**: annualized Sharpe ratio of a daily-rebalanced
-  portfolio that goes long the top-decile predicted names and short the
-  bottom-decile, equal-weighted. Sharpe = `mean(daily return) / stdev(daily
-  return) × √252`. Above +1.0 is the conventional bar for "would actually
+  portfolio that goes long the top-quintile predicted names (top 20%) and
+  short the bottom-quintile (bottom 20%), equal-weighted within each leg.
+  The quintile cut is set in code by `_long_short_returns(top_frac=0.2)` in
+  `src/price_model/eval/metrics.py`. Sharpe is computed per-horizon then
+  annualized: `mean(per-horizon return) / stdev(per-horizon return) × √(252
+  / horizon_days)`. Above +1.0 is the conventional bar for "would actually
   trade this institutionally"; reported here gross of all transaction costs.
 
 ## How the headline was earned — the four-stage journey
@@ -299,7 +302,7 @@ layer; it does not depend on the predictive model.**
 
 `src/price_model/dashboard/` is a thin Streamlit reader over the DuckDB
 prediction store. It exists so the model's daily output can be inspected
-visually (per-date top/bottom decile, rolling IC, prediction vs. realized
+visually (per-date top/bottom quintile, rolling IC, prediction vs. realized
 scatter) without writing a notebook for each look. It is **a debugging /
 monitoring surface, not part of the reproduction journey**. None of the
 headline numbers in this README come from the dashboard, and skipping it
