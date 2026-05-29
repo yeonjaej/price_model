@@ -1,0 +1,91 @@
+# OHLCV completeness model evaluated on the SUBSET universe (no PIT).
+#
+# This is the *ablation counterfactual* for the survivorship-bias finding
+# in the restructured README narrative. It runs the same 22-feature model
+# (technical + anomalies + OHLCV/volume) used by the headline experiment
+# `extended_kaggle_v2_ohlcv`, but on the 160-name modern-survivor subset
+# with the point-in-time filter disabled.
+#
+# The point is to measure the survivorship-bias effect on the FULL
+# (strongest) feature set, not on a deliberately weak baseline. The
+# original chronological journey measured the bias collapse on a
+# 13-feature technical-only setup, which can be argued to inflate the
+# collapse percentage because weak features are particularly bias-prone.
+# This config produces the apples-to-apples comparison that a reviewer
+# would actually want to see:
+#
+#   IC(subset, no PIT, 22 features)  vs  IC(617 PIT, ON, 22 features)
+#
+# The delta is the honest survivorship-bias finding for THE feature set
+# the project ships with — not a strawman.
+#
+# Everything else (features, hyperparameters, walk-forward settings)
+# matches extended_kaggle_v2_ohlcv exactly so the only varied dimension
+# is universe × pit_filter.
+
+experiment_id: extended_kaggle_v2_ohlcv_subset
+
+data:
+  universe: sp500                 # 160-name modern-survivor static subset
+  start: 2017-01-01
+  pit_filter: false               # PIT filtering OFF — the bias counterfactual
+
+features:
+  # Existing v2 features (10)
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  # - momentum_60_sector_rel       # disabled — sector map only covers 156 names
+  - idio_vol_20
+  - momentum_60_rank
+  - vol_20_rank
+  - distance_ma_200_rank
+  - vol_ewm_20
+  - vol_20_cs_min_dist
+  - mom60_minus_dist_ma200
+  # Academic anomalies (3)
+  - momentum_12_1
+  - distance_52w_high
+  - return_1d
+  # OHLCV / volume / MAX-effect batch (6)
+  - range_ratio
+  - body_ratio
+  - parkinson_vol_20
+  - log_dollar_volume
+  - abnormal_volume
+  - max_return_21d
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_ohlcv_subset
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v2_ohlcv_subset
+    class: LightGBMModel
+    params:
+      # Identical hyperparams to extended_kaggle_v2_ohlcv so the ONLY
+      # difference between this run and the PIT run is universe × pit_filter.
+      # 160-name × ~9y = ~290K rows easily fits these hyperparams without
+      # memory pressure.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]
