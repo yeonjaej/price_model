@@ -1,0 +1,78 @@
+# 1-feature LightGBM with positive monotone constraint on momentum_12_1.
+#
+# Diagnostic purpose
+# ------------------
+# The bucket plot of raw `momentum_12_1` against the 5-day forward excess
+# return on this PIT-corrected universe shows the signal is concentrated
+# in the top decile (mean realized = +0.00103) with the middle 70% of
+# tickers essentially flat (+0.00004 to +0.00019 per bucket). The raw
+# univariate Spearman IC of +0.0133 is real, but a 64-leaf LightGBM
+# trained on this single feature destroys ~93% of the signal in the
+# post-October-2022 regime (raw +0.0227 → tree +0.0015) — because the
+# tree's high capacity carves the feature into 64 bins, most of which
+# are in the noise-dominated middle region, and the per-bin sampling
+# noise (~3.5 bp) exceeds the per-bin signal (~1 bp) in those bins.
+#
+# `monotone_constraints: [1]` forces LightGBM to learn a monotone
+# non-decreasing function of momentum_12_1. The tree can still produce
+# a step function, but the steps must be non-decreasing — no overfit
+# bins that anti-correlate with the input. This isolates the
+# "non-monotone overfit" failure mode (Mechanism 1 from the
+# diagnostic).
+#
+# Expected result
+# ---------------
+# With the constraint, the tree's prediction is forced to rank-correlate
+# with the input. Expected post-October-2022 IC: ≈ +0.020 to +0.023
+# (close to the raw univariate signal of +0.0227, with small loss from
+# the per-bin step quantization). If the result is in that range, the
+# diagnosis is empirically confirmed — non-monotone overfit was the
+# mechanism destroying the signal.
+#
+# If the constraint does NOT recover the signal, Mechanism 2
+# (regime-conditional learning of the training-window sign) is the
+# dominant failure mode and a rolling-window training change is the
+# right next experiment.
+#
+# Hyperparameters otherwise identical to lightgbm_1feat_pit.yaml.
+
+experiment_id: lightgbm_1feat_monotone_pit
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_1feat_monotone
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_1feat_monotone_pit_v1
+    class: LightGBMModel
+    params:
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]
+      # +1 = monotone non-decreasing in this feature. One entry per feature.
+      monotone_constraints: [1]
