@@ -1,0 +1,75 @@
+# Classical time-series baselines: ARIMA, GARCH, GBM, on the SAME
+# PIT-corrected 617-ticker universe as the primary LightGBM experiment
+# (extended_kaggle_v2_ohlcv). This is the apples-to-apples version of
+# `classical.yaml`, which is restricted to a 20-ticker non-PIT subset
+# for tractability.
+#
+# Purpose: provide an EMH-null comparison on the same evaluation panel
+# that the primary LightGBM model is evaluated against. The expectation
+# is that the classical baselines pin to IC ~ 0 (within ±0.001) and the
+# Sharpe contribution is negligible — empirical confirmation of the
+# weak-form efficient-market hypothesis on liquid US large-caps.
+#
+# Wall-clock estimate
+# -------------------
+# Per-ticker ARIMA and GARCH fits cost ~1-3 seconds each. Annual refits
+# (refit_freq_days: 252) over a ~7-year evaluation window give ~7-8
+# refits. With ~600 tickers per refit (PIT cross-section), expect:
+#
+#   ARIMA total: ~600 fits/refit × 8 refits × 2s/fit ≈ ~2.5 hours
+#   GARCH total: similar, ~2.5-3 hours
+#   GBM total:   closed-form MLE; minutes
+#
+# Total wall-clock: ~5-8 hours typical, longer on slower hardware. Run
+# this experiment overnight or in the background; classical fits are
+# pure CPU and parallelizable per-ticker but the current harness fits
+# sequentially. The result is one-shot — no need to re-run unless data
+# refreshes.
+#
+# Install dependencies first:
+#   pip install ".[classical]"
+
+experiment_id: classical_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true              # PIT correction ON — matches primary experiment
+
+features: []                    # classical models use only adj_close
+normalize_kind: none
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252          # annual refit (monthly is wall-clock-prohibitive
+                                # at full PIT universe scale)
+  embargo_days: 6
+  min_train_days: 504           # ~2y of context before the first refit
+
+models:
+  - id: zero_v1_classical_pit
+    class: ZeroPredictor
+    params: {}
+
+  - id: arima_classical_pit_v1
+    class: ArimaPerTicker
+    params:
+      order: [1, 0, 1]          # AR(1) + MA(1) on already-stationary log-returns
+      trend: c                  # include constant; pins drift to ticker mean
+      min_history: 252          # skip tickers with < 1 year of usable PIT data
+      horizon_days: 5
+
+  - id: garch_classical_pit_v1
+    class: GarchVolForecaster
+    params:
+      p: 1                      # GARCH(1, 1) — workhorse vol model
+      q: 1
+      mean: Zero                # point return forecast is 0 by design
+      min_history: 252
+      horizon_days: 5
+
+  - id: gbm_classical_pit_v1
+    class: GbmMaximumLikelihood
+    params:
+      min_history: 252
+      horizon_days: 5
