@@ -1,0 +1,131 @@
+# 22-feature LightGBM with monotone constraints aligned to documented
+# anomaly sign expectations.
+#
+# Diagnostic basis
+# ----------------
+# The bucket-plot diagnostic on raw `momentum_12_1` showed the underlying
+# univariate signal is concentrated in the top decile (post-October-2022
+# IC = +0.0227 raw). A standard 64-leaf LightGBM trained on this single
+# feature destroyed ~93% of the signal via non-monotone overfit. Adding
+# `monotone_constraints: [1]` recovered ~82% of the signal in the same
+# regime (IC = +0.0187, t = +3.03, Sharpe = +0.763) — competitive with
+# ARIMA's drift-based momentum proxy.
+#
+# This config extends the diagnostic-grade fix to the 22-feature primary
+# model. Each feature gets a constraint sign matching its documented
+# expected IC in the literature:
+#
+#   +1 (monotone non-decreasing) — momentum-aligned, "high → predicts up"
+#   -1 (monotone non-increasing) — mean-reverting, "high → predicts down"
+#    0 (no constraint)           — ambiguous or risk-aligned, no clean sign
+#
+# Rationale per feature listed inline below. If any constraint sign is
+# wrong (i.e., the literature-expected sign doesn't match the empirical
+# bucket-plot shape on this universe), the corresponding feature
+# contributes zero rather than signal-of-the-wrong-sign — strictly less
+# bad than the unconstrained variant where wrong-sign predictions
+# subtract from IC.
+#
+# Expected result
+# ---------------
+# If the monotone-constraint mechanism generalizes from 1-feature to
+# 22-feature:
+#
+#   - Full-sample IC: rises from +0.0054 (raw) toward +0.010-0.015
+#   - Post-Oct-2022 IC: rises from +0.0181 toward +0.025-0.030
+#   - Post-Oct-2022 net 10bp Sharpe: rises from +0.388 (raw) toward
+#     +0.95-1.05 (combined with EWM smoothing at h=5 if needed)
+#
+# If the result is materially below these targets, individual features
+# may have wrong-sign constraints. Per-feature bucket plots would then
+# guide the corrections.
+#
+# Hyperparameters otherwise identical to extended_kaggle_v2_ohlcv.yaml
+# so the only varied dimension is monotone_constraints.
+
+experiment_id: extended_kaggle_v2_ohlcv_monotone
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # Existing v2 features (10)
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  - idio_vol_20
+  - momentum_60_rank
+  - vol_20_rank
+  - distance_ma_200_rank
+  - vol_ewm_20
+  - vol_20_cs_min_dist
+  - mom60_minus_dist_ma200
+  # Academic anomalies (3)
+  - momentum_12_1
+  - distance_52w_high
+  - return_1d
+  # OHLCV / volume / MAX-effect batch (6)
+  - range_ratio
+  - body_ratio
+  - parkinson_vol_20
+  - log_dollar_volume
+  - abnormal_volume
+  - max_return_21d
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_monotone
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v2_ohlcv_monotone
+    class: LightGBMModel
+    params:
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]
+      # Monotone constraints, one per feature in the order listed above.
+      # Sign rationale per the documented anomaly literature:
+      monotone_constraints: [
+         1,   # return_5d              — recent positive drift continues (Moskowitz-Ooi-Pedersen TSMOM, short horizons)
+         1,   # momentum_60            — 3-month momentum (positive IC)
+         0,   # vol_20                 — risk feature, no clean cross-sectional sign
+         0,   # rsi_14                 — bounded oscillator; relation is non-monotone by construction
+         1,   # distance_ma_200        — long-term trend; above MA → continues (positive momentum)
+         0,   # idio_vol_20            — ambiguous (high idio vol → low return per Ang et al. 2006, BUT betting-against-beta contradicts)
+         1,   # momentum_60_rank       — cross-sectional rank of momentum_60 (same sign)
+         0,   # vol_20_rank            — risk rank, no clean sign
+         1,   # distance_ma_200_rank   — same sign as raw distance_ma_200
+         0,   # vol_ewm_20             — risk feature, no clean sign
+         0,   # vol_20_cs_min_dist     — risk feature, no clean sign
+         1,   # mom60_minus_dist_ma200 — trend-disagreement (positive momentum component dominant)
+         1,   # momentum_12_1          — Jegadeesh-Titman 12-1 (canonical momentum, positive IC)
+         1,   # distance_52w_high      — Hong-Lim-Stein 52-week-high anchoring (positive IC)
+        -1,   # return_1d               — Lehmann (1990) 1-day reversal (NEGATIVE IC)
+         0,   # range_ratio            — within-day vol proxy, ambiguous
+         0,   # body_ratio             — within-day directionality, ambiguous
+         0,   # parkinson_vol_20       — high-low vol estimator, risk feature
+         0,   # log_dollar_volume      — liquidity, ambiguous
+         0,   # abnormal_volume        — spike detector, sign depends on context
+        -1,   # max_return_21d         — Bali-Cakici-Whitelaw MAX effect (NEGATIVE IC, lottery underperformance)
+      ]
