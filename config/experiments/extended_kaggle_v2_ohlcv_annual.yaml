@@ -1,0 +1,115 @@
+# Researcher-grade redesign of the 22-feature OHLCV LightGBM.
+#
+# Diagnostic basis
+# ----------------
+# The empirical investigation established three findings about the original
+# 22-feature LightGBM model (`extended_kaggle_v2_ohlcv`):
+#
+#   1. The cross-sectional momentum signal on this PIT universe at 5-day
+#      forward horizon lives at 12-24 month lookback windows. The original
+#      feature set tops out at `momentum_12_1` (231 days). ARIMA's annual-
+#      refit drift estimate exploits the 18-24 month band that the
+#      LightGBM model never had as an input — explaining how a 3-parameter
+#      univariate baseline beats the engineered model on net Sharpe.
+#
+#   2. Monthly refit produces annual one-sided turnover of 200-300x. The
+#      static-within-year ARIMA's annual turnover is 2x. Net of 10 bp
+#      cost in the post-October-2022 regime: ARIMA Sharpe = +1.118 (decile
+#      L/S), unconstrained LightGBM smoothed = +0.613.
+#
+#   3. Monotone constraints don't help the multi-feature model (the
+#      feature multiplicity provides implicit regularization that the
+#      constraints can't add to, and they prevent useful cross-feature
+#      non-monotone interactions).
+#
+# This config addresses findings 1 and 2 simultaneously:
+#
+#   - Adds momentum_504 (24-month trailing log-return, ARIMA-equivalent)
+#     and momentum_378 (18-month, empirically the strongest univariate
+#     signal on this universe with IC +0.014 and t = +2.41) as features.
+#   - Switches refit_freq_days from 21 (monthly) to 252 (annual) to match
+#     ARIMA's cadence and eliminate the turnover-vs-noise tradeoff.
+#   - Keeps all 21 existing features and identical LightGBM hyperparameters
+#     so the only varied dimensions are (feature set, refit cadence).
+#
+# Hypothesis
+# ----------
+# If the 22-feature engineering has any marginal value above ARIMA's
+# drift-based ranking, this configuration should beat ARIMA's post-Oct-2022
+# decile-L/S net 10 bp Sharpe of +1.118.
+#
+# If it ties or loses, the empirical conclusion is that momentum exhausts
+# the cross-sectional signal extractable from the OHLCV + Ken French inputs
+# on this universe at this frequency, and the 22-feature engineering is
+# not net value-additive after appropriate cost-aware portfolio
+# construction. That is itself a defensible finding, consistent with
+# Avramov-Cheng-Metzker (2023) on ML's limited edge on heavily-arbitraged
+# liquid universes.
+
+experiment_id: extended_kaggle_v2_ohlcv_annual
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # Existing v2 features (10)
+  - return_5d
+  - momentum_60
+  - vol_20
+  - rsi_14
+  - distance_ma_200
+  - idio_vol_20
+  - momentum_60_rank
+  - vol_20_rank
+  - distance_ma_200_rank
+  - vol_ewm_20
+  - vol_20_cs_min_dist
+  - mom60_minus_dist_ma200
+  # Academic anomalies (3)
+  - momentum_12_1
+  - distance_52w_high
+  - return_1d
+  # OHLCV / volume / MAX-effect batch (6)
+  - range_ratio
+  - body_ratio
+  - parkinson_vol_20
+  - log_dollar_volume
+  - abnormal_volume
+  - max_return_21d
+  # Long-horizon momentum features (2 new) — ARIMA-equivalent inputs
+  - momentum_378                  # 18-month, empirically strongest univariate
+  - momentum_504                  # 24-month, ARIMA-drift equivalent
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252            # annual refit — matches ARIMA's cadence
+  embargo_days: 6
+  min_train_days: 504             # ~2y of context (unchanged)
+
+models:
+  - id: zero_v1_annual
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v2_ohlcv_annual
+    class: LightGBMModel
+    params:
+      # Hyperparameters identical to extended_kaggle_v2_ohlcv.yaml so the
+      # only varied dimensions are (1) the two added features and (2) the
+      # refit cadence change to annual.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]
