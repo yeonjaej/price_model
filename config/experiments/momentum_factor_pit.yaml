@@ -1,0 +1,80 @@
+# Direct momentum-factor baselines on the PIT-corrected universe.
+#
+# Diagnostic basis
+# ----------------
+# Prior cross-sectional comparisons in this project used `ArimaPerTicker`
+# as the "classical" baseline. ARIMA at annual refit with `trend='c'` on
+# log-returns produces a forecast dominated by its constant term, which
+# is `≈ mean(log_return)` over the training window. After cross-sectional
+# demeaning, this is mathematically identical to ranking tickers by
+# trailing momentum — a documented anomaly (Jegadeesh-Titman 1993,
+# Moskowitz-Ooi-Pedersen 2012).
+#
+# This makes "LightGBM vs ARIMA" effectively "LightGBM vs naive momentum
+# factor" wrapped in time-series machinery. Replacing ARIMA with the
+# direct factor implementation aligns the comparison with the
+# literature-standard structure (Gu-Kelly-Xiu 2020, Han-He-Rapach-Zhou
+# 2024) where cross-sectional ML is compared against explicit documented
+# factors.
+#
+# Expected result
+# ---------------
+# The direct momentum factor on `momentum_378` (empirically the strongest
+# univariate cross-sectional signal at 5-day horizon on this PIT universe)
+# should reproduce ARIMA's IC and Sharpe in the post-October-2022 regime
+# within statistical noise:
+#
+#   ARIMA  (post-2022, decile L/S):  net 10bp Sharpe = +1.118
+#   mom_378 direct (predicted):       net 10bp Sharpe ≈ +1.10 to +1.20
+#
+# If the prediction holds, the project's comparison can be reframed:
+# the relevant baseline is the documented momentum factor, not ARIMA.
+# ARIMA's role drops to "classical time-series implementation of the
+# same factor; confirms the mechanism."
+#
+# Wall-clock: ~30 seconds. No model fit happens; the predict step
+# just returns the feature value. The walk-forward harness still
+# iterates through refits to keep the prediction-date grid identical
+# to the other models, but each refit is trivial.
+
+experiment_id: momentum_factor_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_378                  # 18-month — empirically strongest univariate
+  - momentum_504                  # 24-month — ARIMA-drift equivalent
+  - momentum_12_1                 # Jegadeesh-Titman canonical (for reference)
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252            # annual refit to match ARIMA's cadence
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: mom_378_factor
+    class: MomentumFactor
+    features:
+      - momentum_378
+    params:
+      feature_name: momentum_378
+
+  - id: mom_504_factor
+    class: MomentumFactor
+    features:
+      - momentum_504
+    params:
+      feature_name: momentum_504
+
+  - id: mom_12_1_factor
+    class: MomentumFactor
+    features:
+      - momentum_12_1
+    params:
+      feature_name: momentum_12_1

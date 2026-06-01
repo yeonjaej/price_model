@@ -7,7 +7,7 @@ strings to instantiate models without import gymnastics in YAML.
 from __future__ import annotations
 
 from price_model.models.base import Model, ModelConfig
-from price_model.models.baseline import LastReturnPredictor, ZeroPredictor
+from price_model.models.baseline import LastReturnPredictor, MomentumFactor, ZeroPredictor
 from price_model.models.boosting import LightGBMModel
 from price_model.models.classical import (
     ArimaPerTicker,
@@ -23,6 +23,7 @@ from price_model.models.foundation import ChronosZeroShot
 MODEL_REGISTRY: dict[str, type[Model]] = {
     "ZeroPredictor": ZeroPredictor,
     "LastReturnPredictor": LastReturnPredictor,
+    "MomentumFactor": MomentumFactor,
     "LightGBMModel": LightGBMModel,
     "ChronosZeroShot": ChronosZeroShot,
     # Classical baselines (need [classical] extras to actually fit)
@@ -51,6 +52,7 @@ __all__ = [
     "LightGBMModel",
     "Model",
     "ModelConfig",
+    "MomentumFactor",
     "ZeroPredictor",
     "build_model",
 ]
