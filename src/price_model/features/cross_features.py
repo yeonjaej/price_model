@@ -107,6 +107,47 @@ def _rank_in_date(expr: pl.Expr) -> pl.Expr:
 
 
 @register
+class RollingBeta60(Feature):
+    """Rolling 60-day market beta of the ticker's daily log returns.
+
+    Market is proxied by the cross-sectional mean daily log return per date.
+    Beta = cov(r_ticker, r_market) / var(r_market) over the trailing 60 days,
+    computed via `mean(xy) - mean(x)·mean(y)` rolling expectations.
+
+    Diagnostic basis: cross-sectional correlation between ARIMA's prediction
+    and rolling beta_60 was -0.067 (full sample) — the project's "beta tilt"
+    alternative explanation for ARIMA's IC is empirically falsified. This
+    feature is included primarily as a CONTROL in regularized linear models
+    (Han-He-Rapach-Zhou-style E-LASSO): include β as a covariate so the
+    coefficients on momentum / vol features represent alpha *after*
+    controlling for market exposure.
+    """
+
+    name = "beta_60"
+    inputs = ("adj_close",)
+    lookback_days = 61  # 1 for diff + 60 for rolling beta window
+
+    def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
+        c = pl.col("adj_close")
+        log_ret = (c.log() - c.log().shift(1)).over("ticker")
+        panel = panel.with_columns(log_ret.alias("_ret"))
+        # Cross-sectional mean return per date (equal-weight universe proxy for market)
+        panel = panel.with_columns(pl.col("_ret").mean().over("date").alias("_mkt_ret"))
+
+        mean_x = pl.col("_ret").rolling_mean(window_size=60).over("ticker")
+        mean_y = pl.col("_mkt_ret").rolling_mean(window_size=60).over("ticker")
+        mean_xy = (pl.col("_ret") * pl.col("_mkt_ret")).rolling_mean(window_size=60).over("ticker")
+        mean_y2 = (
+            (pl.col("_mkt_ret") * pl.col("_mkt_ret")).rolling_mean(window_size=60).over("ticker")
+        )
+        cov_xy = mean_xy - mean_x * mean_y
+        var_y = mean_y2 - mean_y * mean_y
+        beta = pl.when(var_y > 1e-12).then(cov_xy / var_y).otherwise(None)
+        out = panel.with_columns(beta.alias(self.name))
+        return out.drop(["_ret", "_mkt_ret"])
+
+
+@register
 class Momentum60Rank(Feature):
     """Cross-sectional rank (within date) of momentum_60. Robust to fat tails."""
 

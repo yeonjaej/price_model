@@ -1,0 +1,131 @@
+# Regularized linear cross-sectional baseline: LassoCV on a curated panel of
+# diagnostic-justified features.
+#
+# Motivation
+# ----------
+# The OHLCV LightGBM model (extended_kaggle_v2_ohlcv) at refit_freq_days=21
+# trades ~206x annual turnover and posts a NEGATIVE net-of-cost Sharpe at
+# 10bp transaction costs. The diagnostic pass over the post-Oct-2022 regime
+# established that:
+#
+#   - The cross-sectional momentum signal lives at 12-24 month lookback
+#     windows (Jegadeesh-Titman, momentum_504); short-horizon mom_60 has
+#     ~0 univariate IC on the post-2022 regime.
+#   - Volatility is the dominant single-feature signal post-2022 (vol_ewm_20
+#     univariate t-stat +4.47); higher vol predicts higher forward return,
+#     opposite to the textbook "low-vol anomaly" sign.
+#   - LightGBM with 22 features and monotone constraints does NOT beat its
+#     unconstrained 1-feature variant — the model isn't learning interactions
+#     that survive out-of-sample; it's just adding turnover.
+#
+# Han, He, Rapach, Zhou (2024, Review of Finance) — "Expected Stock
+# Returns and the Cross-Section: An E-LASSO Approach" — show that Lasso on
+# documented characteristics matches or beats heavier ML on the
+# heavily-arbitraged US large-cap universe net of trading costs. The
+# mechanism is automatic feature selection: with 3-5 features that actually
+# carry cross-sectional signal and the rest set to zero, the resulting
+# forecast is much smoother across refits than a tree ensemble's, which
+# directly reduces turnover.
+#
+# Feature panel (12 features)
+# ---------------------------
+# Long-horizon momentum cluster (the diagnostic-confirmed signal):
+#   - momentum_504  (24-month — the ARIMA-equivalent window)
+#   - momentum_378  (18-month — empirically strongest univariate)
+#   - momentum_12_1 (Jegadeesh-Titman canonical 12-1 month)
+#   - momentum_756  (36-month — proxy for the ARIMA-equivalent at annual refit)
+#
+# Volatility / risk cluster:
+#   - vol_20        (20-day realized vol, flat window)
+#   - vol_ewm_20    (EWM-20 vol — strongest single feature post-2022)
+#   - parkinson_vol_20  (high-low-based realized vol; lower-noise than vol_20)
+#
+# Liquidity / size proxy:
+#   - log_dollar_volume  (controls for size-effect; common in factor zoo work)
+#
+# Beta / risk control:
+#   - beta_60       (60-day rolling market beta to cross-sectional mean — the
+#                    "alpha after controlling for market exposure" control
+#                    advocated in E-LASSO)
+#
+# Tail-event / overbought controls:
+#   - max_return_21d  (Bali-Cakici-Whitelaw MAX effect — negative coefficient
+#                      expected: tail-event names underperform)
+#   - body_ratio    ( |open - close| / close — within-day directional body)
+#   - range_ratio   ( (high - low) / close — within-day vol proxy)
+#
+# Normalization
+# -------------
+# `zscore` per date matches the rest of the project. Lasso is scale-sensitive,
+# so cross-sectional z-scoring is necessary for the L1 penalty to apply
+# uniformly across features (otherwise log_dollar_volume's magnitude would
+# dominate the penalty and bias the model away from it).
+#
+# Walk-forward
+# ------------
+# Annual refit (252 days). The Lasso CV picks α inside each refit window;
+# the predictions are stable across refits by construction (slow-changing
+# linear coefficients on slow-changing rank-normalized features), so annual
+# cadence is sufficient and reduces unnecessary turnover.
+#
+# Expected outcome
+# ----------------
+# IC: comparable to or better than LightGBM 22-feature (~+0.013 to +0.020).
+# Turnover: dramatically lower than LightGBM (~20-50x annual instead of 206x).
+# Net-of-cost Sharpe at 10bp: positive — this is the metric that matters.
+# Selected α: small but positive; sparsity pattern reveals which features
+# the data prefers (diagnostic output for the model card).
+#
+# Wall-clock: ~5-10 minutes. Lasso with 5-fold CV on the pooled panel is
+# fast; the harness's per-refit ARIMA-style overhead doesn't apply.
+
+experiment_id: lasso_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # Long-horizon momentum (the post-2022-confirmed cross-sectional signal)
+  - momentum_504
+  - momentum_378
+  - momentum_12_1
+  - momentum_756
+  # Volatility cluster (dominant post-2022 signal — positive sign empirically)
+  - vol_20
+  - vol_ewm_20
+  - parkinson_vol_20
+  # Liquidity / size control
+  - log_dollar_volume
+  # Beta control (the "alpha after market exposure" control)
+  - beta_60
+  # Tail-event / overbought controls
+  - max_return_21d
+  - body_ratio
+  - range_ratio
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252            # annual refit; Lasso predictions are slow
+                                  # by construction (linear coefficients on
+                                  # rank-normalized features)
+  embargo_days: 6
+  min_train_days: 504             # 2y of cross-sectional history before first fit
+
+models:
+  - id: zero_v1_lasso_baseline
+    class: ZeroPredictor
+    params: {}
+
+  - id: lasso_pit_v1
+    class: LassoCrossSectional
+    params:
+      cv: 5
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true
+      # alphas: null → use sklearn's default geometric grid (100 values)

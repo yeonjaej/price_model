@@ -1,14 +1,10 @@
-"""Tests for the long-horizon momentum features (momentum_378, momentum_504).
+"""Tests for the long-horizon momentum features (momentum_378, momentum_504, momentum_756).
 
 These features were added as the diagnostic-grade response to the empirical
 finding that the cross-sectional momentum signal on this PIT universe lives
-at 12-24 month lookback windows. They give LightGBM explicit access to the
-signal an annual-refit ARIMA implicitly computes via its drift term.
-
-Note: the synthetic_panel fixture provides 600 trading days of history. The
-504-day feature has only ~96 populated rows per ticker on the fixture; the
-tests below verify the math is correct on the populated subset and that
-warmup behavior matches the declared lookback.
+at 12-24 month lookback windows. They give LightGBM and the Lasso explicit
+access to the signal an annual-refit ARIMA implicitly computes via its drift
+term.
 """
 
 from __future__ import annotations
@@ -21,7 +17,7 @@ import pytest
 import price_model.features.technical  # noqa: F401  trigger registration
 from price_model.features.base import FEATURE_REGISTRY
 
-NEW_FEATURES = ["momentum_378", "momentum_504"]
+NEW_FEATURES = ["momentum_378", "momentum_504", "momentum_756"]
 
 
 @pytest.mark.parametrize("name", NEW_FEATURES)
@@ -39,7 +35,7 @@ def test_feature_produces_output_column(synthetic_panel, name: str):
 
 @pytest.mark.parametrize(
     "name,lookback",
-    [("momentum_378", 378), ("momentum_504", 504)],
+    [("momentum_378", 378), ("momentum_504", 504), ("momentum_756", 756)],
 )
 def test_warmup_nulls_match_lookback(synthetic_panel, name: str, lookback: int):
     """The first `lookback` rows per ticker should be null (no history yet)."""
@@ -77,6 +73,16 @@ def test_momentum_378_equals_log_ratio(synthetic_panel):
     row = one.row(400, named=True)
     expected = math.log(row["adj_close"]) - math.log(one.row(400 - 378, named=True)["adj_close"])
     assert abs(row["momentum_378"] - expected) < 1e-12
+
+
+def test_momentum_756_equals_log_ratio(synthetic_panel):
+    """Verify the math: momentum_756(t) = log(adj_close_t / adj_close_{t-756})."""
+    feat = FEATURE_REGISTRY["momentum_756"]
+    out = feat.compute(synthetic_panel).sort(["ticker", "date"])
+    one = out.filter(pl.col("ticker") == "AAA").sort("date")
+    row = one.row(800, named=True)
+    expected = math.log(row["adj_close"]) - math.log(one.row(800 - 756, named=True)["adj_close"])
+    assert abs(row["momentum_756"] - expected) < 1e-12
 
 
 @pytest.mark.parametrize("name", NEW_FEATURES)

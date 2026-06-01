@@ -27,7 +27,9 @@ def synthetic_panel() -> pl.DataFrame:
         "EEE": "Energy",
         "FFF": "Energy",
     }
-    n_days = 600
+    # 900 days so the longest-lookback feature (momentum_756) has populated rows
+    # for the truncation-invariance leakage test.
+    n_days = 900
     start = date(2020, 1, 2)
     dates = [start + timedelta(days=i) for i in range(n_days)]
 

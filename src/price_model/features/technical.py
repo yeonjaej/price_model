@@ -269,6 +269,35 @@ class Momentum504(Feature):
         return panel.with_columns((c.log() - c.log().shift(504)).over("ticker").alias(self.name))
 
 
+@register
+class Momentum756(Feature):
+    """3-year (756-trading-day) trailing log-return: log(P_t) - log(P_{t-756}).
+
+    Empirical diagnostic finding: ARIMA(1, 0, 1) at annual refit on this
+    PIT panel estimates μ̂ over the FULL training window, which grows from
+    ~600 days at the first refit (May 2019) to ~2200 days at the last
+    refit (May 2025). The effective average ARIMA-equivalent window over
+    the evaluation period is ~1400 days — longer than `momentum_504` and
+    shorter than `momentum_1260` (5-year). `momentum_756` (3-year) sits
+    in the right neighborhood for a fixed-window proxy of what ARIMA does.
+
+    The diagnostic that motivates this feature: cross-sectional Spearman
+    correlation between ARIMA's prediction and `mom_504` was only +0.43
+    full-sample, not the +0.85+ that would obtain if ARIMA's signal were
+    exactly the 24-month trailing return. The gap is the window mismatch.
+    `momentum_756` should correlate more strongly with ARIMA's prediction
+    and is the better single-feature proxy for ARIMA in the cross-section.
+    """
+
+    name = "momentum_756"
+    inputs = ("adj_close",)
+    lookback_days = 756
+
+    def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
+        c = pl.col("adj_close")
+        return panel.with_columns((c.log() - c.log().shift(756)).over("ticker").alias(self.name))
+
+
 # -----------------------------------------------------------------------------
 # OHLCV / volume features — the obvious omissions
 # -----------------------------------------------------------------------------

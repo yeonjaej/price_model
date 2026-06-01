@@ -16,6 +16,7 @@ from price_model.models.classical import (
     GbmMaximumLikelihood,
 )
 from price_model.models.foundation import ChronosZeroShot
+from price_model.models.linear import LassoCrossSectional
 
 # Classical and foundation models import cleanly without their optional deps;
 # import errors are deferred to fit() / predict() time. So the registry hard-binds
@@ -25,6 +26,7 @@ MODEL_REGISTRY: dict[str, type[Model]] = {
     "LastReturnPredictor": LastReturnPredictor,
     "MomentumFactor": MomentumFactor,
     "LightGBMModel": LightGBMModel,
+    "LassoCrossSectional": LassoCrossSectional,
     "ChronosZeroShot": ChronosZeroShot,
     # Classical baselines (need [classical] extras to actually fit)
     "ArimaPerTicker": ArimaPerTicker,
@@ -48,6 +50,7 @@ __all__ = [
     "FamaFrenchFactorModel",
     "GarchVolForecaster",
     "GbmMaximumLikelihood",
+    "LassoCrossSectional",
     "LastReturnPredictor",
     "LightGBMModel",
     "Model",
