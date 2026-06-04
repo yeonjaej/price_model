@@ -341,7 +341,11 @@ def shuffle_null_ic(
         for j, (pred, realized) in enumerate(per_date_arrays):
             shuffled = rng.permutation(pred)
             rho, _ = spearmanr(shuffled, realized)
-            per_date_ics[j] = rho if rho is not None and not math.isnan(rho) else 0.0
+            # spearmanr returns SignificanceResult (newer scipy) — its rho can be
+            # SupportsFloat but pyright's union type is wider. Coerce explicitly
+            # so the numpy array assignment is unambiguous.
+            rho_f = float(rho) if rho is not None else float("nan")
+            per_date_ics[j] = rho_f if not math.isnan(rho_f) else 0.0
         null_mean_ics[i] = per_date_ics.mean()
 
     null_mean = float(null_mean_ics.mean())
