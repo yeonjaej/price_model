@@ -341,7 +341,7 @@ def test_elasticnet_sparsity_decreases_as_l1_ratio_decreases(synthetic_panel):
         way to get strictly-no-zeros behavior is l1_ratio=0, which sklearn
         explicitly forbids (it recommends RidgeCV for that case).
 
-    Instead this test verifies the meaningful relative property: at fixed α,
+    Instead this test verifies the meaningful relative property: at fixed alpha,
     sweeping l1_ratio from 1.0 (pure Lasso) down to 0.01 (near-Ridge) should
     produce a MONOTONE decrease in the zero-coefficient count. This is the
     practical "L2 mixed in → less sparsity" property that motivates using
@@ -355,7 +355,7 @@ def test_elasticnet_sparsity_decreases_as_l1_ratio_decreases(synthetic_panel):
             feature_cols=tuple(FEATS),
             params={
                 "l1_ratios": [l1_ratio],
-                "alphas": [0.001],  # small fixed α — soft enough that not everything zeros
+                "alphas": [0.001],  # small fixed alpha - soft enough that not everything zeros
                 "cv": 3,
                 "max_iter": 5000,
             },

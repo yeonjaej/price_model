@@ -235,8 +235,8 @@ def deflated_sharpe_ratio(
 
     # Test statistic with higher-moment correction
     denom_sq = max(1.0 - skew * sharpe_obs + (kurt - 1.0) / 4.0 * sharpe_obs**2, 1e-12)
-    test_stat = (sharpe_obs - expected_max) * float(np.sqrt(n_periods - 1)) / float(
-        np.sqrt(denom_sq)
+    test_stat = (
+        (sharpe_obs - expected_max) * float(np.sqrt(n_periods - 1)) / float(np.sqrt(denom_sq))
     )
     prob_true_positive = float(norm.cdf(test_stat))
     return {
@@ -324,9 +324,7 @@ def shuffle_null_ic(
         sub = grp.drop_nulls(subset=["prediction", "realized"])
         if sub.height < min_obs_per_date:
             continue
-        per_date_arrays.append(
-            (sub["prediction"].to_numpy(), sub["realized"].to_numpy())
-        )
+        per_date_arrays.append((sub["prediction"].to_numpy(), sub["realized"].to_numpy()))
     if not per_date_arrays:
         return ShuffleNullResult(
             observed_ic=observed_ic,
@@ -406,9 +404,7 @@ def _residualize_per_date(
         # Build a per-date residual frame and join back. Easier: replace target
         # column in `sub` and append `grp`'s rows that weren't in `sub` (null
         # ones) unchanged.
-        sub_resid = sub.with_columns(
-            pl.Series(target_col, resid, dtype=pl.Float64)
-        )
+        sub_resid = sub.with_columns(pl.Series(target_col, resid, dtype=pl.Float64))
         # Rows that had nulls in neutralize_cols / target — pass through.
         # We rebuild grp by combining (sub_resid) + (rows of grp not in sub).
         # Use ticker as a unique id within date.
@@ -491,9 +487,7 @@ def compute_ic_neutralized(
         how="inner",
     )
     neut_ic_df = _per_date_ic(joined.drop_nulls(["prediction", "realized"]))
-    ic_neutralized = (
-        float(neut_ic_df["ic"].mean()) if neut_ic_df.height > 0 else float("nan")
-    )
+    ic_neutralized = float(neut_ic_df["ic"].mean()) if neut_ic_df.height > 0 else float("nan")
 
     return {
         "ic_gross": ic_gross,

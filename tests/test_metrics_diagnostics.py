@@ -147,7 +147,7 @@ def test_compute_ic_neutralized_kills_signal_when_prediction_is_the_factor():
                 {
                     "date": d,
                     "ticker": f"T{t}",
-                    "prediction": float(factor_vals[t]),     # prediction = factor
+                    "prediction": float(factor_vals[t]),  # prediction = factor
                     "realized": float(factor_vals[t] + noise[t]),  # realized = factor + noise
                     "factor": float(factor_vals[t]),
                 }
@@ -209,12 +209,8 @@ def test_deflated_sharpe_more_trials_lowers_probability():
     LOWER probability that the true Sharpe is positive (more multiple-test
     deflation). Use a borderline Sharpe (0.3) so neither case saturates at p=1.
     """
-    r_few = deflated_sharpe_ratio(
-        sharpe_obs=0.3, n_trials=5, n_periods=100, skew=0.0, kurt=3.0
-    )
-    r_many = deflated_sharpe_ratio(
-        sharpe_obs=0.3, n_trials=500, n_periods=100, skew=0.0, kurt=3.0
-    )
+    r_few = deflated_sharpe_ratio(sharpe_obs=0.3, n_trials=5, n_periods=100, skew=0.0, kurt=3.0)
+    r_many = deflated_sharpe_ratio(sharpe_obs=0.3, n_trials=500, n_periods=100, skew=0.0, kurt=3.0)
     assert r_few["probability_true_sharpe_positive"] > r_many["probability_true_sharpe_positive"]
     # More trials → higher expected max under null
     assert r_many["expected_max_sharpe_under_null"] > r_few["expected_max_sharpe_under_null"]
@@ -225,18 +221,12 @@ def test_deflated_sharpe_long_history_raises_probability():
     produce a HIGHER probability that the true Sharpe is positive. Borderline
     Sharpe (0.2) so the test doesn't saturate.
     """
-    r_short = deflated_sharpe_ratio(
-        sharpe_obs=0.2, n_trials=200, n_periods=50, skew=0.0, kurt=3.0
-    )
-    r_long = deflated_sharpe_ratio(
-        sharpe_obs=0.2, n_trials=200, n_periods=500, skew=0.0, kurt=3.0
-    )
+    r_short = deflated_sharpe_ratio(sharpe_obs=0.2, n_trials=200, n_periods=50, skew=0.0, kurt=3.0)
+    r_long = deflated_sharpe_ratio(sharpe_obs=0.2, n_trials=200, n_periods=500, skew=0.0, kurt=3.0)
     assert r_long["probability_true_sharpe_positive"] > r_short["probability_true_sharpe_positive"]
 
 
 def test_deflated_sharpe_handles_degenerate_input():
     """n_periods < 2 should return NaN cleanly without raising."""
-    r = deflated_sharpe_ratio(
-        sharpe_obs=1.0, n_trials=10, n_periods=1, skew=0.0, kurt=3.0
-    )
+    r = deflated_sharpe_ratio(sharpe_obs=1.0, n_trials=10, n_periods=1, skew=0.0, kurt=3.0)
     assert np.isnan(r["probability_true_sharpe_positive"])

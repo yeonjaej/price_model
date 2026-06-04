@@ -183,9 +183,7 @@ class XGBoostModel(Model):
             [
                 np.asarray(
                     [
-                        b.get_booster()
-                        .get_score(importance_type="gain")
-                        .get(f"f{i}", 0.0)
+                        b.get_booster().get_score(importance_type="gain").get(f"f{i}", 0.0)
                         for i in range(len(feats))
                     ]
                 )

@@ -372,9 +372,7 @@ class ElasticNetCrossSectional(Model):
         alphas_resolved = 100 if alphas_cfg is None else alphas_cfg
         l1_ratios_cfg = self.config.params.get("l1_ratios")
         l1_ratios_resolved = (
-            [0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
-            if l1_ratios_cfg is None
-            else l1_ratios_cfg
+            [0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0] if l1_ratios_cfg is None else l1_ratios_cfg
         )
         return {
             "alphas": alphas_resolved,
