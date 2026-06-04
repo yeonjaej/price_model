@@ -15,10 +15,12 @@ Headline 21-day comparison on the 2025-01-02 → 2026-04-27 OOS slice (334 dates
 | 24-month momentum factor | none | +0.0510 | +6.31 | +1.40 | +1.39 |
 | 18-month momentum factor | none | +0.0423 | +4.96 | +1.35 | +1.33 |
 | JT 12-1 momentum (canonical) | none | +0.0312 | +3.51 | +1.04 | +1.02 |
-| Ridge regression, 12-feature panel | inner CV | +0.0250 | +3.08 | +0.76 | +0.66 |
+| Ridge regression, 12-feature panel † | inner CV | +0.0250 | +3.08 | +0.76 | +0.66 |
 | LightGBM, default HPs | none | +0.0278 | +4.35 | +0.75 | +0.63 |
 | LightGBM, held-out Optuna (≤ 2024-12-31) | held-out Optuna | +0.0191 | +3.02 | +0.75 | +0.61 |
 | Pure-momentum Lasso, 4 momentum features | inner CV | **−0.0185** | **−2.79** | −0.21 | −0.26 |
+
+† The 12-feature Ridge regression was trained at 5-day target horizon and evaluated at 21-day; the project does not include a 21-day-trained Ridge variant. The IC reported reflects "5-day-trained Ridge whose signal happens to persist at 21-day," not a Ridge model specifically fit for monthly horizon.
 
 Two top-line observations from the table:
 
@@ -27,27 +29,30 @@ Two top-line observations from the table:
 
 For the technical setup (PIT correction, walk-forward training with embargo, inner CV for regularization-strength selection, held-out Optuna, deflated Sharpe), see [Methodology](#methodology). For analysis of why ML fell short, why long-horizon momentum wins net-of-cost, and the regime fragility of hyperparameter optimization, see [Discussion](#discussion).
 
-The result is **statistically rigorous, regime-conditional, and not deployable for retail investors** after bid-ask spreads, commissions, and capital-gains taxes. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations) and [Scope and limitations](#scope-and-limitations) for the bounds on what these numbers mean.
+The result is **statistically rigorous, regime-conditional, and not deployable for retail investors** after bid-ask spreads, commissions, and capital-gains taxes. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations) and [Scope and limitations](#scope-and-limitations) for the bounds on what these numbers mean. For the precise definitions of each metric in the table above (IC, t-stat, gross / net long-short Sharpe, annual turnover, deflated Sharpe), see [Metric definitions](#metric-definitions).
 
-### Metric definitions
+## Metric definitions
+
+The headline 21-day result is reported in terms of standard cross-sectional asset-pricing metrics. The definitions below apply throughout the rest of the README. The worked example below uses 5-day forward excess return because that is what most stored predictions in the project are; substitute 21-day forward excess return for the headline result without loss of generality (the formula is the same, only the horizon changes).
 
 - **Information Coefficient (IC).** Cross-sectional ranking quality of
   the model, averaged over time.
 
   *Per-date IC.* On each date `t` in the evaluation window, the model
   produces a prediction for every ticker in the cross-section that has a
-  realized 5-day forward excess return available. Let `N_t` be the number
-  of such tickers on date `t` — in the present universe `N_t` is on the
-  order of 300-600. The per-date IC is the Spearman rank correlation
-  between two vectors **of length N_t**: the vector of predictions and the
-  vector of realized 5-day forward excess returns. Note that the vectors
-  are not length 5; the "5" refers to the *horizon* of the return target,
-  not the number of observations.
+  realized forward excess return available at the model's target horizon
+  `H`. Let `N_t` be the number of such tickers on date `t` — in the
+  present universe `N_t` is on the order of 300-600. The per-date IC is
+  the Spearman rank correlation between two vectors **of length N_t**:
+  the vector of predictions and the vector of realized `H`-day forward
+  excess returns. Note that the vectors are not length `H`; the horizon
+  refers to the return target, not the number of observations.
 
   *Time-averaged IC.* The reported IC is the unweighted average of the
-  per-date ICs across all evaluation dates (`n_dates = 1758` full sample,
-  `n_dates = 905` post-October-2022). A weak ranker on most days plus one
-  strong day does not produce a high IC; consistent ranking is required.
+  per-date ICs across all evaluation dates (e.g., `n_dates = 334` for the
+  21-day headline OOS slice 2025-01-02 → 2026-04-27). A weak ranker on
+  most days plus one strong day does not produce a high IC; consistent
+  ranking is required.
 
   *Worked example.* On a hypothetical date with `N_t = 5` tickers,
   suppose the model's predictions and the realized 5-day forward excess
@@ -69,13 +74,13 @@ The result is **statistically rigorous, regime-conditional, and not deployable f
 
   So the per-date IC on this hypothetical date is **+0.90**. Perfect
   ranking would give +1.0; perfect mis-ranking would give −1.0;
-  independent ranking would give roughly 0. The reported headline
-  headline L1 regression 21-day IC of +0.0697 is therefore the **average over 334
-  such daily correlations** across the 2025-01-02 → 2026-04-27 OOS slice,
-  each computed across ~450 tickers. A per-date IC of +0.07 on average is
-  small in absolute terms but large in t-stat (+5.24) due to the
-  high date count — the consistency across days, not the magnitude on
-  any one day, is what makes the signal credible.
+  independent ranking would give roughly 0. The reported headline 21-day
+  IC of +0.0697 is therefore the **average over 334 such daily
+  correlations** across the 2025-01-02 → 2026-04-27 OOS slice, each
+  computed across ~450 tickers. A per-date IC of +0.07 on average is
+  small in absolute terms but large in t-stat (+5.24) due to the high
+  date count — the consistency across days, not the magnitude on any
+  one day, is what makes the signal credible.
 
   *Interpretation benchmarks.* On liquid US large-caps, IC = +0.02 with
   t-stat > 2 is considered a credible edge. IC ≈ +0.10 would be
@@ -119,7 +124,7 @@ The result is **statistically rigorous, regime-conditional, and not deployable f
   correction for skew and kurtosis. The threshold for "significant
   after multi-test correction" is `DSR > 0.95`. Implemented in
   `src/price_model/eval/metrics.py::deflated_sharpe_ratio`; computed
-  across all 24 project trials in `scripts/deflated_sharpe_audit.py`.
+  across all project trials in `scripts/deflated_sharpe_audit.py`.
 - **Cross-sectional return dispersion (regime indicator).** For each
   date, the standard deviation of daily log returns across the
   cross-section, smoothed by a 20-day rolling mean. Computed only from
@@ -548,16 +553,14 @@ src/price_model/
 └── cli.py               # `price-model` entry point
 
 config/experiments/      # YAML configs for each stage above
-notebooks/               # diagnostic + classical + robustness + portfolio
+notebooks/               # diagnostic + classical + robustness + portfolio + features
 tests/                   # leakage tests, PIT tests, ticker tests, contract tests
 ```
 
-The same data infrastructure also supports
-`notebooks/04_portfolio_attribution.ipynb`, which uses the Ken French
-adapter directly (not the model layer) to decompose a 10-stock
-equal-weight portfolio's exposures and attribute realized returns to
-factors. The notebook is an independent application of the data layer
-and does not depend on the predictive model.
+Notebooks of note:
+
+- `notebooks/04_portfolio_attribution.ipynb` — uses the Ken French adapter directly (not the model layer) to decompose a 10-stock equal-weight portfolio's exposures and attribute realized returns to factors. Independent application of the data layer; does not depend on the predictive model.
+- `notebooks/05_feature_exploration.ipynb` — boilerplate for understanding the project's 41 registered features and adding new ones. Covers feature distributions, cross-sectional dispersion over time, the pairwise correlation matrix on the headline 9-feature panel, fitted L1 regression coefficients, LightGBM gain importance, and a step-by-step template for adding a new feature.
 
 ### Streamlit dashboard
 
