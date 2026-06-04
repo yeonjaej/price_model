@@ -28,11 +28,13 @@ st.caption(
 
 st.info(
     "**This is the page that tells you which models to trust.** Stored "
-    "predictions are joined to the *realized* 5-day forward excess return for "
-    "the same (date, ticker) and scored. **IC > 0.02 with t-stat > 2** is real "
-    "signal on a mega-cap universe; **long-short Sharpe > 1** is the bar for "
-    "being worth trading. Negative IC means the model is reliably wrong — "
-    "still useful as a contrarian indicator but not as a buy list."
+    "predictions are joined to the *realized* forward excess return for the "
+    "same (date, ticker) and scored at the horizon you select below (default "
+    "5 days; set to 21 to reproduce the README's headline HHRZ E-LASSO IC of "
+    "+0.0697). **IC > 0.02 with t-stat > 2** is real signal on a mega-cap "
+    "universe; **long-short Sharpe > 1** is the bar for being worth trading. "
+    "Negative IC means the model is reliably wrong — still useful as a "
+    "contrarian indicator but not as a buy list."
 )
 
 store = get_store()
@@ -71,9 +73,10 @@ if joined.height == 0:
 summary = compare_models(joined, horizon_days=int(horizon))
 st.subheader("Overall scoreboard")
 st.caption(
-    "All stored predictions joined to their realized 5-day forward excess return. "
-    "Higher is better for `information_coefficient`, `ic_t_stat`, `hit_rate`, and "
-    "`long_short_sharpe`; lower is better for `mae` and `rmse`."
+    "All stored predictions joined to their realized forward excess return at "
+    "the selected horizon. Higher is better for `information_coefficient`, "
+    "`ic_t_stat`, `hit_rate`, and `long_short_sharpe`; lower is better for "
+    "`mae` and `rmse`."
 )
 st.dataframe(summary.to_pandas(), width="stretch")
 

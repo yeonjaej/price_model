@@ -1,0 +1,139 @@
+# Microstructure factor baselines: documented short-horizon anomalies
+# evaluated as standalone single-feature factors via the MomentumFactor
+# model class.
+#
+# Methodological reference
+# ------------------------
+# The cross-sectional return-prediction literature places 5-day-horizon
+# alpha primarily in microstructure / price-volume decompositions, not in
+# slow factors:
+#
+#   - Lehmann (1990) "Fads, Martingales, and Market Efficiency": daily
+#     to weekly cross-sectional reversal.
+#   - Jegadeesh (1990): same finding at adjacent horizons.
+#   - Lou-Polk-Skouras (2019): overnight returns continue, intraday
+#     returns reverse — opposite-signed short-horizon persistence.
+#   - Amihud (2002): price-impact-per-dollar-traded as a liquidity /
+#     reversal-strength interaction.
+#   - Avramov-Chordia-Goyal (2006): reversal is stronger in less-liquid
+#     names; Amihud-style measures are useful both as signals and as
+#     interaction terms.
+#
+# The project's previous reversal baseline (`reversal_factor_pit.yaml`)
+# used raw `return_1d` / `return_5d` sign-flipped. That implementation
+# is contaminated by:
+#   - bid-ask bounce (microstructure noise that's not tradable),
+#   - market-direction component (everything moves together in
+#     directional regimes),
+#   - sector-rotation component.
+# This experiment measures the cleaned versions of the reversal signal.
+#
+# Factor implementations
+# ----------------------
+# Each factor uses the MomentumFactor model class with `sign=+1` for
+# continuation-direction signals or `sign=-1` for reversal-direction
+# signals. The IC then has the expected sign for each documented effect:
+#
+#   overnight_continuation_factor (sign=+1):
+#     Lou-Polk-Skouras: overnight returns CONTINUE. Sign is +1 so a
+#     positive IC means the textbook continuation effect is present.
+#
+#   intraday_reversal_factor (sign=-1):
+#     Lou-Polk-Skouras: intraday returns REVERSE. Sign is -1; positive
+#     IC means high intraday return predicts low forward return.
+#
+#   residual_reversal_5d_factor (sign=-1):
+#     Beta-residualized reversal — cleaner than raw return_5d because
+#     market-direction component is removed. Positive IC = reversal
+#     direction.
+#
+#   sector_relative_reversal_5d_factor (sign=-1):
+#     Sector-demeaned reversal — within-sector reversal only.
+#
+#   amihud_illiquidity_factor (sign=+1):
+#     High Amihud illiquidity predicts higher forward returns (illiquidity
+#     premium; see also Avramov-Chordia-Goyal 2006 for reversal-stronger-
+#     in-illiquid-names interaction).
+#
+# Expected results
+# ----------------
+# Gross IC: each of these should produce statistically significant gross
+# IC on the apples-to-apples evaluation slice. Magnitudes of +0.005 to
+# +0.020 are typical from the literature on liquid US large-caps post-2010.
+#
+# Net-of-cost: most will go negative at 10 bp due to high turnover —
+# this is the project's documented pattern for fast signals. Reporting
+# gross alongside net is the diagnostic.
+#
+# The interesting comparison is the cleaned-reversal-vs-raw-reversal
+# delta. If `residual_reversal_5d_factor` produces meaningfully higher
+# IC than `reversal_5d_factor` (already in the project), the
+# beta-residualization is doing real work. If `sector_relative_reversal_5d_factor`
+# produces higher IC than raw `reversal_5d_factor`, sector-rotation
+# contamination was a real driver of the raw signal's noise.
+#
+# Wall-clock: ~30 seconds. No model fit happens; the predict step just
+# returns sign · feature value.
+
+experiment_id: microstructure_factors_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - overnight_return_1d
+  - intraday_return_1d
+  - amihud_illiquidity_20
+  - residual_return_5d
+  - sector_relative_return_5d
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: overnight_continuation_factor
+    class: MomentumFactor
+    features:
+      - overnight_return_1d
+    params:
+      feature_name: overnight_return_1d
+      sign: 1                       # Lou-Polk-Skouras: overnight returns continue
+
+  - id: intraday_reversal_factor
+    class: MomentumFactor
+    features:
+      - intraday_return_1d
+    params:
+      feature_name: intraday_return_1d
+      sign: -1                      # Lou-Polk-Skouras: intraday returns reverse
+
+  - id: residual_reversal_5d_factor
+    class: MomentumFactor
+    features:
+      - residual_return_5d
+    params:
+      feature_name: residual_return_5d
+      sign: -1                      # Reversal direction on beta-residualized return
+
+  - id: sector_relative_reversal_5d_factor
+    class: MomentumFactor
+    features:
+      - sector_relative_return_5d
+    params:
+      feature_name: sector_relative_return_5d
+      sign: -1                      # Reversal direction on sector-demeaned return
+
+  - id: amihud_illiquidity_factor
+    class: MomentumFactor
+    features:
+      - amihud_illiquidity_20
+    params:
+      feature_name: amihud_illiquidity_20
+      sign: 1                       # Illiquidity premium: more illiquid → higher return

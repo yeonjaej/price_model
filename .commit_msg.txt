@@ -1,44 +1,98 @@
-docs(readme): tone pass — academic, professional, concise
+feat(model): regularized linear cross-sectional baseline (LassoCV)
 
-Convert first-person constructions to passive voice or third-person
-throughout. No "we", "our", "I", or "you" addressing the reader. All
-numbers, claims, code references, and the ablation matrix preserved.
+Diagnostic basis
+----------------
+The OHLCV LightGBM (extended_kaggle_v2_ohlcv) at refit_freq_days=21
+trades ~206x annual turnover and posts a NEGATIVE net-of-cost Sharpe
+at 10bp transaction costs. The post-Oct-2022 regime decomposition
+showed: (a) the cross-sectional momentum signal lives at 12-24 month
+lookbacks, not the 60-day window LightGBM was anchored on; (b)
+volatility is the dominant single-feature signal with POSITIVE sign;
+(c) the 22-feature monotone-constrained tree does not beat its
+1-feature unconstrained variant on either gross IC or net Sharpe -
+the model is adding turnover, not signal.
 
-Section-level changes:
+Han, He, Rapach, Zhou (2024, Review of Finance) - "Expected Stock
+Returns and the Cross-Section: An E-LASSO Approach" - establish that
+Lasso on documented characteristics matches or beats heavier ML on
+heavily-arbitraged US large-caps net of trading costs. The mechanism
+is automatic feature selection plus slow-changing linear coefficients,
+both of which reduce turnover by construction.
 
-- "Executive Summary" → "Executive summary" (sentence-case heading
-  convention) and the bullets cleaned up to consistent academic phrasing.
-- "How the headline was earned — three orthogonal ablations" →
-  "Headline result: ablation analysis". Body rewritten to passive /
-  third-person; intent unchanged.
-- "Subset universe, PIT ablation (22-feature model)" →
-  "Universe × PIT × regime ablation (22-feature model)" (more accurate
-  description of the matrix axes).
-- "Three independent readings fall out of this" → "Three observations
-  follow". Bullets reworded with measured academic register
-  ("A practitioner running ... would observe ... and infer a credible
-  edge ...") rather than rhetorical asides.
-- "Reproduce the ablations" → "Reproduction". Stage commands trimmed
-  and the orphaned HTML comment about the chronological build was
-  dropped (the same content now lives elsewhere in less obtrusive form).
-- "Data quality and methodological limitations": meta-sentences
-  removed ("This is the section I'd want any reviewer to read"). The
-  yfinance limitations enumeration retained verbatim aside from
-  rephrasing ownership ("our drop list" → "the project drop list").
-- "Upward bias due to data limitations" → "Sources of upward bias in
-  the headline". All five caveats rephrased in declarative academic
-  voice. The single-window caveat now states "A multi-window
-  robustness check has not been performed" rather than "I didn't run".
-- "What would need to change to deliver a *true* PIT-correct number"
-  → "Toward a fully PIT-correct evaluation".
-- "Honest scope — what this is NOT" → "Scope and limitations".
-- "On the Streamlit dashboard" → "Streamlit dashboard".
-- "Development notes": Claude Code attribution preserved. Light prose
-  cleanup; "Treat this README ... as the author's claims" remains as
-  the closing line but in third-person form.
-- Headings normalized to sentence-case.
+What ships
+----------
+1. LassoCrossSectional model (src/price_model/models/linear.py)
+   Pooled LassoCV fit on the (date, ticker) feature panel against y
+   (forward excess return). Parameters configurable via config.params:
+   alphas, cv (default 5), max_iter (5000), tol (1e-4), selection
+   ("cyclic"), fit_intercept (True). Exposes feature_importance()
+   (signed coefficients) and selected_alpha() for diagnostics.
+   Pickle save/load round-trip. Registered as "LassoCrossSectional"
+   in MODEL_REGISTRY.
 
-Final state: no instances of we / our / I / you remain in the README
-(other than the country code "US"). No source code changes; 91 tests
-passing on the local-runnable subset (test_store has a pre-existing
-unrelated collection error on the sandbox-only Python 3.10).
+2. Two new features:
+
+   - momentum_756 (technical.py)
+     3-year (756-day) trailing log return. Motivated by the empirical
+     finding that ARIMA's annual-refit equivalent window over the
+     evaluation period is ~1400 days; 756 days sits between mom_504
+     and mom_1260 and is the better fixed-window proxy. The
+     cross-sectional Spearman correlation between ARIMA's prediction
+     and mom_504 was only +0.43 full-sample, not the +0.85+ a clean
+     identification would imply; the gap is the window mismatch.
+
+   - beta_60 / RollingBeta60 (cross_features.py)
+     60-day rolling beta of daily log returns to the cross-sectional
+     mean log return (equal-weighted universe proxy for market). The
+     diagnostic that motivates it: cross-sectional correlation between
+     ARIMA's prediction and beta_60 is -0.067 full-sample - the
+     project's "beta tilt" alternative explanation for ARIMA's IC is
+     empirically falsified. The feature is included primarily as a
+     control covariate in the Lasso so coefficients on momentum / vol
+     features represent alpha after controlling for market exposure
+     (the E-LASSO control structure).
+
+3. Experiment config (config/experiments/lasso_pit.yaml)
+   12-feature LassoCV on the PIT-corrected sp500_pit universe:
+   - Long-horizon momentum: mom_504, mom_378, mom_12_1, mom_756
+   - Vol cluster: vol_20, vol_ewm_20, parkinson_vol_20
+   - Size control: log_dollar_volume
+   - Beta control: beta_60
+   - Tail-event / overbought: max_return_21d, body_ratio, range_ratio
+   Annual refit (252d) - Lasso predictions are slow by construction so
+   monthly cadence would just add turnover. Z-score normalization per
+   date (required for L1 to penalize features uniformly).
+
+4. Tests (tests/test_lasso_model.py, tests/test_cross_features.py,
+   tests/test_long_horizon_momentum.py extended)
+   - Lasso: fit/predict round-trip, save/load preserves predictions to
+     1e-12, feature_importance shape + finiteness, selected_alpha
+     positivity, heavy regularization zeros at least one coefficient.
+   - beta_60: registration, dtype, 60-row warmup, per-ticker isolation
+     under FP tolerance, recovers known beta direction on a 2-ticker
+     constructed panel, returns 0 on flat prices.
+   - momentum_756: registration, warmup matches lookback (756 nulls),
+     math equals log(P_t / P_{t-756}), per-ticker isolation, flat
+     prices give zero momentum.
+
+5. conftest.py: synthetic_panel bumped from 600 to 900 trading days so
+   the no-leakage truncation-invariance test exercises momentum_756
+   (which needs > 756 days of history).
+
+Hypotheses being tested
+-----------------------
+H_signal: at least one of the long-horizon momentum + volatility
+  features survives L1 selection with a non-zero coefficient, and the
+  beta_60 / size controls absorb factor exposure without distorting
+  the residual signal.
+
+H_turnover: Lasso's slow-changing linear coefficients drive turnover
+  below 50x annual (vs ~206x for the 22-feature LightGBM), making net
+  Sharpe at 10bp positive for the first time on this project.
+
+Expected wall-clock: ~5-10 min. CLI command to run it:
+
+    price-model run-experiment --config config/experiments/lasso_pit.yaml
+
+After the run, inspect coefficients via model.feature_importance() to
+build the model card's "selected features" section.

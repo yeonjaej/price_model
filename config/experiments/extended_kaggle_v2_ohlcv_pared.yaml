@@ -1,0 +1,182 @@
+# Pared LightGBM panel: 10 features, one per documented anomaly family.
+#
+# Diagnostic basis
+# ----------------
+# `extended_kaggle_v2_ohlcv` runs LightGBM on 22 features and produces
+# post-Oct-2022 gross IC +0.0183 (t = +4.34) at annual turnover ~206x
+# and net-of-cost Sharpe negative at 10 bp. Investigation across the
+# project's diagnostic notebooks established four structural problems
+# with the 22-feature panel:
+#
+# 1. EIGHT vol-correlated features (vol_20, vol_20_rank, vol_20_cs_min_dist,
+#    vol_ewm_20, parkinson_vol_20, idio_vol_20, range_ratio, max_return_21d)
+#    create heavy within-family collinearity. LightGBM is robust to it but
+#    wastes split capacity ranking near-duplicates, contributing directly
+#    to the 206x turnover.
+#
+# 2. The strongest empirical momentum windows (momentum_504, momentum_756)
+#    are MISSING from the panel. The regime-split apples-to-apples diagnostic
+#    showed momentum_12_1 leads in the Jan 2024 → Mar 2026 regime at IC
+#    +0.0354 (t = 4.29), and the longer-window factors mom_504 and mom_756
+#    cluster nearby at +0.0298 and +0.0277. The current LightGBM has only
+#    mom_12_1 to work with — and three dead-weight mom_60-family features.
+#
+# 3. The 60-day momentum cluster (momentum_60, momentum_60_rank,
+#    mom60_minus_dist_ma200) carries near-zero univariate IC on this
+#    universe post-2022. The Lasso v1 fit assigned a coefficient of
+#    +0.000029 to mom60_minus_dist_ma200 — essentially noise. These three
+#    features occupy ~15% of the panel for no contribution.
+#
+# 4. The trend cluster (rsi_14, distance_ma_200, distance_ma_200_rank) has
+#    weak academic literature support on cross-sectional return prediction.
+#    These slots could carry stronger documented signals.
+#
+# Also genuinely missing: beta_60 (Frazzini-Pedersen BAB / market-exposure
+# control). The HHRZ (2024) E-LASSO recipe makes this mandatory, and on
+# a multi-feature panel like this it should appear as a control too.
+#
+# Pared panel (10 features, one per family)
+# -----------------------------------------
+# Each feature represents a distinct documented economic mechanism with
+# literature attribution. No two features in the panel measure the same
+# quantity.
+#
+#   Momentum family (3 windows, spaced ≥18 months apart):
+#     - momentum_12_1      JT canonical (Jegadeesh-Titman 1993)
+#     - momentum_378       18-month — most regime-robust momentum window
+#                          on this universe per the apples-to-apples split
+#                          (Δ IC across regimes only +0.003 — smallest of any
+#                          model in the table)
+#     - momentum_756       36-month — captures secular drift; sign behavior
+#                          differs from short-horizon momentum and provides
+#                          regime-conditional information
+#
+#   Behavioral anchor (orthogonal to lookback-window momentum):
+#     - distance_52w_high  George-Hwang (2004) 52-week-high anchor
+#
+#   Volatility (ONE measure, not eight):
+#     - vol_ewm_20         EWM 20-day realized vol — strongest single
+#                          univariate vol signal in the diagnostic
+#                          (post-2022 t-stat +4.47)
+#
+#   Idiosyncratic / residual (distinct from total vol):
+#     - idio_vol_20        Ang-Hodrick-Xing-Zhang (2006) idio-vol anomaly
+#
+#   Tail / extreme:
+#     - max_return_21d     Bali-Cakici-Whitelaw (2011) MAX effect
+#
+#   Short-term reversal:
+#     - return_1d          Lehmann (1990) / Jegadeesh (1990) short-term
+#                          reversal
+#
+#   Size / liquidity:
+#     - log_dollar_volume  Amihud (2002) liquidity proxy
+#
+#   Market-exposure control:
+#     - beta_60            Frazzini-Pedersen (2014) BAB-adjacent / required
+#                          control in the HHRZ E-LASSO recipe
+#
+# DROPPED from extended_kaggle_v2_ohlcv (12 features):
+#   - momentum_60                 — weak window, near-zero univariate IC
+#   - momentum_60_rank            — same signal, ranked
+#   - mom60_minus_dist_ma200      — composite of two weak signals
+#   - return_5d                   — Lehmann territory at non-optimal horizon
+#   - rsi_14                      — weak cross-sectional literature
+#   - distance_ma_200             — weak cross-sectional literature
+#   - distance_ma_200_rank        — same signal, ranked
+#   - vol_20                      — collinear with vol_ewm_20
+#   - vol_20_rank                 — same signal, ranked
+#   - vol_20_cs_min_dist          — same signal, transformed
+#   - parkinson_vol_20            — collinear with vol_ewm_20
+#   - abnormal_volume             — weak documented signal on liquid large-caps
+#   - body_ratio                  — weak documented signal
+#   - range_ratio                 — collinear with vol features
+#
+# ADDED to extended_kaggle_v2_ohlcv (3 features):
+#   + momentum_378                — most regime-robust momentum window
+#   + momentum_756                — long-horizon drift / secular trend
+#   + beta_60                     — Frazzini-Pedersen market-exposure control
+#
+# Hyperparameters
+# ---------------
+# IDENTICAL to extended_kaggle_v2_ohlcv so the comparison isolates the
+# FEATURE-PANEL effect, not model capacity. Same learning_rate, num_leaves,
+# min_data_in_leaf, regularization, n_estimators, multi-seed, early
+# stopping. The only difference between this experiment and v2_ohlcv is
+# which features the trees can split on.
+#
+# Hypotheses being tested
+# -----------------------
+# H_turnover: with one volatility feature instead of eight, day-to-day
+#   prediction noise from collinear features should decline. Expected
+#   annual turnover: ~60-100x (vs ~206x for v2_ohlcv), enough to recover
+#   positive net-of-cost Sharpe at 10 bp.
+#
+# H_gross_IC_neutral: removing weak / redundant features shouldn't drop
+#   gross IC meaningfully — LightGBM at 64 leaves can find the strong
+#   signals either way. Adding the long-horizon momentum cluster (504,
+#   756) and beta_60 control may modestly improve gross IC by giving
+#   the trees access to signal that wasn't in the panel before.
+#
+# H_interpretability: feature_importance() on the pared panel should
+#   produce a readable ranking where each surviving feature traces to a
+#   documented academic mechanism. The 22-feature version's feature
+#   importance is dominated by which-vol-variant-won random fluctuation,
+#   not by economic interpretability.
+
+experiment_id: extended_kaggle_v2_ohlcv_pared
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # Momentum family (3 windows, spaced ≥18 months apart)
+  - momentum_12_1
+  - momentum_378
+  - momentum_756
+  # Behavioral anchor (orthogonal to lookback momentum)
+  - distance_52w_high
+  # Volatility (one measure)
+  - vol_ewm_20
+  # Idiosyncratic / residual
+  - idio_vol_20
+  # Tail / extreme
+  - max_return_21d
+  # Short-term reversal
+  - return_1d
+  # Size / liquidity
+  - log_dollar_volume
+  # Market-exposure control
+  - beta_60
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_ohlcv_pared
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v2_ohlcv_pared
+    class: LightGBMModel
+    params:
+      # IDENTICAL to extended_kaggle_v2_ohlcv. Isolating feature effect.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]

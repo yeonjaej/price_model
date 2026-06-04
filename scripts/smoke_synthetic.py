@@ -46,7 +46,7 @@ def synthetic_panel(n_tickers: int = 20, n_days: int = 1500, seed: int = 7) -> p
         idio = rng.normal(0.0002, 0.012, size=n_days)
         log_ret = beta * market + idio
         prices = 100.0 * np.exp(np.cumsum(log_ret))
-        for d, p in zip(dates, prices):
+        for d, p in zip(dates, prices, strict=True):
             rows.append({
                 "date": d, "ticker": t, "sector": sector_for[t],
                 "open": float(p), "high": float(p) * 1.01, "low": float(p) * 0.99,

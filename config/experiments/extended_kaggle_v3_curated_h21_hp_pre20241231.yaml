@@ -1,0 +1,48 @@
+experiment_id: extended_kaggle_v3_curated_h21_hp_pre20241231
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+features:
+- abnormal_volume
+- distance_52w_high
+- mom60_minus_dist_ma200
+- return_5d
+- max_return_21d
+- momentum_12_1
+- rsi_14
+- log_dollar_volume
+- vol_ewm_20
+- momentum_60_rank
+- cs_return_dispersion_20
+- sector_relative_return_5d
+- momentum_504
+- beta_60
+normalize_kind: zscore
+target_horizon: 21
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 22
+  min_train_days: 504
+models:
+- id: zero_v1_ohlcv_curated_h21
+  class: ZeroPredictor
+  params: {}
+- id: lightgbm_kaggle_v3_curated_h21_hp_pre20241231
+  class: LightGBMModel
+  params:
+    learning_rate: 0.09738100140380881
+    num_leaves: 80
+    min_data_in_leaf: 469
+    feature_fraction: 0.9162804687041095
+    bagging_fraction: 0.9446756637145418
+    bagging_freq: 5
+    lambda_l1: 0.10308584061165488
+    lambda_l2: 44.41729352475883
+    n_estimators: 519
+    val_fraction: 0.1
+    early_stopping_rounds: 100
+    seeds:
+    - 42
+    - 2024
+    - 12345

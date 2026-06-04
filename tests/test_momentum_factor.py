@@ -113,3 +113,68 @@ def test_works_with_any_named_feature():
         }
     ).with_columns(pl.col("date").str.to_date())
     assert m.predict(panel)["prediction"].to_list() == [0.42]
+
+
+def test_negative_sign_negates_predictions():
+    """With sign=-1, predictions are the negation of the feature value — the
+    Lehmann short-term reversal convention applied to return_1d / return_5d."""
+    cfg = ModelConfig(
+        model_id="reversal_test",
+        feature_cols=("return_1d",),
+        target_col="y",
+        params={"feature_name": "return_1d", "sign": -1},
+    )
+    m = MomentumFactor(cfg)
+    m.fit(pl.DataFrame({"return_1d": [0.01, -0.02], "y": [0.0, 0.0]}))
+    panel = pl.DataFrame(
+        {
+            "date": ["2024-01-01", "2024-01-02"],
+            "ticker": ["AAA", "AAA"],
+            "return_1d": [0.05, -0.03],
+        }
+    ).with_columns(pl.col("date").str.to_date())
+    preds = m.predict(panel)["prediction"].to_list()
+    # sign=-1 → preds = -feature
+    assert preds == [-0.05, 0.03]
+
+
+def test_positive_sign_default_matches_no_sign_param():
+    """The default sign (+1) must produce identical predictions to a fit with
+    no sign param at all — backwards compatibility guarantee."""
+    cfg_no_sign = ModelConfig(
+        model_id="x",
+        feature_cols=("return_1d",),
+        target_col="y",
+        params={"feature_name": "return_1d"},
+    )
+    cfg_explicit = ModelConfig(
+        model_id="x",
+        feature_cols=("return_1d",),
+        target_col="y",
+        params={"feature_name": "return_1d", "sign": 1},
+    )
+    m1 = MomentumFactor(cfg_no_sign)
+    m2 = MomentumFactor(cfg_explicit)
+    m1.fit(pl.DataFrame({"return_1d": [0.0], "y": [0.0]}))
+    m2.fit(pl.DataFrame({"return_1d": [0.0], "y": [0.0]}))
+    panel = pl.DataFrame(
+        {
+            "date": ["2024-01-01"],
+            "ticker": ["AAA"],
+            "return_1d": [0.07],
+        }
+    ).with_columns(pl.col("date").str.to_date())
+    assert m1.predict(panel)["prediction"].to_list() == m2.predict(panel)["prediction"].to_list()
+
+
+def test_invalid_sign_raises():
+    """Any sign other than ±1 must raise at fit time."""
+    cfg = ModelConfig(
+        model_id="x",
+        feature_cols=("return_1d",),
+        target_col="y",
+        params={"feature_name": "return_1d", "sign": 2},
+    )
+    m = MomentumFactor(cfg)
+    with pytest.raises(ValueError, match="sign"):
+        m.fit(pl.DataFrame({"return_1d": [0.0], "y": [0.0]}))

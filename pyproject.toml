@@ -75,6 +75,14 @@ ignore = ["E501"]  # line length handled by formatter
 "src/price_model/features/factor_loadings.py" = ["RUF002", "RUF003"]
 # Dashboard help text uses the same Unicode math/punctuation as the rest of the project.
 "src/price_model/dashboard/**/*.py" = ["RUF001", "RUF002", "RUF003"]
+# Metrics module uses capital X for feature matrix (universal ML convention) and
+# σ in null-distribution docstrings (standard statistics notation).
+"src/price_model/eval/metrics.py" = ["N806", "RUF002"]
+# Scripts use capital X / y for ML feature matrices and target vectors per
+# universal convention; some scripts manipulate sys.path before importing
+# from the project package (E402). Math notation (α, β, σ, −) appears in
+# docstrings for stacker / regularizer descriptions.
+"scripts/*.py" = ["E402", "N803", "N806", "RUF001", "RUF002"]
 
 [tool.pyright]
 include = ["src", "tests"]

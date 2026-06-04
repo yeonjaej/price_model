@@ -17,11 +17,17 @@ st.caption("Most recent predicted excess return per (model, ticker).")
 
 st.info(
     "**How to read the table.** Each row is a ticker, each model column is its "
-    "predicted 5-day forward excess return (decimal log-return; `+0.01` ≈ +1% "
-    "vs. universe mean over the next week). **`consensus`** is the mean across "
-    "selected models; **`disagreement`** is their stdev. Tickers near the top "
-    "of the table are the strongest *agreed-upon* buys on the latest date in "
-    "the store; tickers at the bottom are the strongest agreed-upon shorts."
+    "predicted forward excess return (decimal log-return; `+0.01` ≈ +1% vs. "
+    "universe mean over the forecast horizon). **`consensus`** is the mean "
+    "across selected models; **`disagreement`** is their stdev. Tickers near "
+    "the top of the table are the strongest *agreed-upon* buys on the latest "
+    "date in the store; tickers at the bottom are the strongest agreed-upon "
+    "shorts.\n\n"
+    "**Headline models from the README evaluation:** `lasso_elasso_pit_h21` "
+    "(HHRZ E-LASSO at 21-day, strongest gross signal), `mom_756_factor_h21` "
+    "(36-month momentum, strongest net-of-cost Sharpe), `lasso_elasso_pit_v1` "
+    "(HHRZ at 5-day). Trim the model selector below to just these three for "
+    "the cleanest read of consensus."
 )
 
 store = get_store()

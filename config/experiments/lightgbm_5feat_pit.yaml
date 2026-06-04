@@ -1,0 +1,77 @@
+# 5-feature minimum LightGBM on the PIT-corrected universe.
+#
+# Diagnostic purpose
+# ------------------
+# Tests the hypothesis (H1) that the 22-feature LightGBM model dilutes
+# the momentum signal that simple per-ticker drift estimators
+# (ARIMA, GBM) capture cleanly with IC ≈ +0.015.
+#
+# Feature set is the bare-minimum cross-sectional model:
+#   - momentum_12_1: Jegadeesh-Titman 12-1 momentum (the canonical
+#     long-horizon momentum anomaly the literature documents)
+#   - momentum_60: 60-day intermediate momentum (shorter horizon)
+#   - return_5d: short-horizon return (captures Lehmann reversal)
+#   - vol_20: realized 20-day volatility (risk control)
+#   - max_return_21d: Bali-Cakici-Whitelaw MAX effect (negative IC
+#     anomaly, lottery-stock underperformance)
+#
+# Hypotheses, by expected outcome:
+#   - 5-feature gross IC ≈ +0.014 → +0.016 (matches ARIMA): the
+#     22-feature model was diluting the signal; the engineered OHLCV
+#     and rank features were net noise. The right structural fix is
+#     to ship a 5-feature model.
+#   - 5-feature gross IC ≈ +0.005 (matches 22-feature): the issue is
+#     not feature dilution but something else (tree capacity, refit
+#     cadence, cross-sectional normalization interaction). H1 is
+#     falsified for the 5-feature variant.
+#   - 5-feature IC between the two extremes: partial dilution; some
+#     features in the 17 dropped help, others hurt, and feature
+#     selection within the 22 would be the right path.
+#
+# All hyperparameters and walk-forward settings are IDENTICAL to
+# extended_kaggle_v2_ohlcv.yaml so the only varied dimension is the
+# feature set. This is the controlled experiment H1 needs.
+
+experiment_id: lightgbm_5feat_pit
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_60
+  - return_5d
+  - vol_20
+  - max_return_21d
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_5feat
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_5feat_pit_v1
+    class: LightGBMModel
+    params:
+      # Hyperparams identical to extended_kaggle_v2_ohlcv.yaml.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]

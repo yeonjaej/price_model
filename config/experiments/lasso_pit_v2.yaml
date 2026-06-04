@@ -1,0 +1,129 @@
+# Pared 5-feature Lasso: one representative per characteristic family.
+#
+# Motivation (from lasso_pit_v1 diagnostic)
+# -----------------------------------------
+# The 12-feature `lasso_pit_v1` returned full-sample IC = 0.002 (t = 0.43)
+# despite the same universe carrying ARIMA gross IC = 0.0162 (t = 4.42) and
+# GBM gross IC = 0.0144 (t = 3.05). Inspection of the fitted Lasso showed:
+#
+#   - α = 2.4e-5 (cross-validation picked almost no penalty)
+#   - 11 of 12 coefficients non-zero
+#   - momentum_504 = -0.000612 and momentum_378 = +0.000572 — two columns
+#     with cross-sectional Spearman > 0.85 assigned opposing signs of nearly
+#     equal magnitude, so their net contribution per ticker cancels:
+#         mom_504 · (-0.000612) + mom_378 · (+0.000572) ≈ 0
+#   - The same cancellation pattern across the volatility cluster
+#     (vol_ewm_20 vs parkinson_vol_20 vs range_ratio, with vol_20 driven to
+#     exactly zero by L1)
+#   - Prediction dispersion = 1.7% of target std → essentially flat
+#     predictions → no usable cross-sectional ranking
+#
+# The diagnosis is feature collinearity, not absent signal. The four
+# long-horizon momentum columns (mom_12_1, mom_378, mom_504, mom_756) carry
+# approximately the same cross-sectional information, and L1 is indifferent
+# between selecting any one of them or splitting weight across several with
+# opposing signs. The CV ends up picking the cancellation solution because
+# it has lower in-sample variance than committing to one column.
+#
+# Han, He, Rapach, Zhou (2024, Review of Finance) — the E-LASSO recipe —
+# explicitly recommend pre-cleaning the characteristic panel to one
+# representative per economically distinct factor before running Lasso on
+# the cross-section. This config implements that recipe.
+#
+# Feature panel (5 features, one per family)
+# ------------------------------------------
+# - momentum_504        — the 24-month trailing log return; the ARIMA-equivalent
+#                         window (cross-sectional Spearman +0.43 with ARIMA's
+#                         prediction in the v1 diagnostic). Picked over mom_378
+#                         and mom_756 because 504 is the literature-standard
+#                         "long-horizon momentum" lookback (Jegadeesh-Titman
+#                         span) and matches ARIMA's effective window most
+#                         closely on this evaluation slice.
+#
+# - vol_ewm_20          — EWM-20 volatility. Strongest single vol feature in
+#                         the diagnostic notebook (post-2022 univariate
+#                         t-stat = +4.47). Picked over vol_20 (flat window)
+#                         and parkinson_vol_20 (high-low estimator) because
+#                         EWM adapts to regime changes faster.
+#
+# - max_return_21d      — Bali-Cakici-Whitelaw MAX effect. On this universe
+#                         the empirical sign is POSITIVE (opposite to the
+#                         textbook tail-event-underperformance prediction);
+#                         the v1 fit confirmed this (+0.000394 coefficient).
+#                         Kept because it is the only non-momentum,
+#                         non-volatility characteristic in the surviving
+#                         signal set.
+#
+# - log_dollar_volume   — Liquidity / size proxy. Standard control in
+#                         factor-zoo work; not collinear with momentum or vol.
+#                         Coefficient was +0.000287 in v1, the empirical
+#                         direction (large names led).
+#
+# - beta_60             — Rolling 60-day market beta to the cross-sectional
+#                         mean return. The "alpha after market exposure"
+#                         control advocated in E-LASSO. Falsified the
+#                         "ARIMA = beta tilt" alternative in the diagnostic
+#                         (corr = -0.067 with ARIMA's prediction). Kept here
+#                         as a true control covariate.
+#
+# Hypotheses being tested
+# -----------------------
+# H_extraction: if the signal that ARIMA captures is in the panel as
+#   momentum_504, then removing collinear momentum siblings should let
+#   Lasso allocate the long-horizon-momentum coefficient cleanly. Predicted
+#   outcome: momentum_504 emerges as the dominant positive coefficient,
+#   net IC lands in the +0.010 to +0.015 range — matching ARIMA's gross IC
+#   on the same universe.
+#
+# H_collinearity_was_the_problem: if instead this 5-feature Lasso still
+#   produces IC near 0.002, the issue is not panel design but something
+#   structural about Lasso's pooled-panel objective vs ARIMA's per-ticker
+#   estimation. That would be its own interesting finding — it would suggest
+#   the slow-trailing-mean signal is per-ticker-idiosyncratic in a way a
+#   single cross-sectional coefficient can't capture.
+#
+# Either outcome is informative. The first confirms the HRZ (2024) E-LASSO
+# recipe on this data; the second points toward heterogeneous-coefficient
+# linear models (e.g. ticker-fixed-effect Lasso) as the next experiment.
+#
+# Wall-clock: ~5-10 min, same as lasso_pit_v1. Same harness, same splits,
+# same evaluation. The model_id differs from v1 so predictions land in
+# their own slot in the prediction store and the comparison table can hold
+# both side by side.
+
+experiment_id: lasso_pit_v2
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_504
+  - vol_ewm_20
+  - max_return_21d
+  - log_dollar_volume
+  - beta_60
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v2_lasso_baseline
+    class: ZeroPredictor
+    params: {}
+
+  - id: lasso_pit_v2
+    class: LassoCrossSectional
+    params:
+      cv: 5
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true
+      # alphas: null → use sklearn's default geometric grid (100 values)

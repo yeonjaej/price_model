@@ -1,0 +1,175 @@
+# E-LASSO: documented-anomaly multi-factor cross-sectional baseline.
+#
+# Methodological reference
+# ------------------------
+# Han, He, Rapach, Zhou (2024, Review of Finance) — "Expected Stock
+# Returns and the Cross-Section: An E-LASSO Approach." The paper's core
+# claim: on heavily-arbitraged liquid US equity universes, the right
+# baseline for cross-sectional ML is not a single documented factor but
+# a CURATED PANEL of documented characteristics with L1 regularization
+# allowing automatic selection. Their published baseline outperforms
+# heavier ML on a per-feature basis net of transaction costs.
+#
+# Why this experiment exists
+# --------------------------
+# Earlier in the project, `mom_12_1_factor` (the Jegadeesh-Titman 1993
+# canonical 12-month momentum factor) was treated as the "academic
+# baseline" — full-sample IC +0.0162, post-Oct-2022 IC +0.0206, the
+# strongest single gross signal in the comparison. But mom_12_1 alone is
+# only the WEAKEST version of the academic baseline. The literature's
+# strong baseline for ML comparison is a multi-anomaly combination, not
+# a single factor. Until a properly-curated E-LASSO baseline is
+# measured, the claim that ML "doesn't beat the baseline" on this
+# universe is undersupported — it just doesn't beat the single-factor
+# version of the baseline.
+#
+# Two prior Lasso runs in the project (`lasso_pit` and `lasso_pit_v2`)
+# produced near-zero or negative IC. But:
+#   - `lasso_pit_v1` (12 features) had heavy intra-family collinearity
+#     (four momentum lookbacks + three vol measures), and L1 split
+#     correlated columns into cancelling signs.
+#   - `lasso_pit_v2` (5 features) eliminated collinearity but dropped
+#     momentum_12_1, the empirically strongest single signal, in favor
+#     of momentum_504 which our diagnostics later showed is the WEAKEST
+#     momentum factor on this universe.
+#
+# This config corrects both failure modes:
+#   - One feature per economically distinct anomaly family (no
+#     within-family collinearity).
+#   - Includes momentum_12_1 explicitly — the JT canonical and the
+#     strongest single signal on this universe.
+#   - Adds documented anomalies missing from v2 (idio_vol, 52-week-high
+#     extension, short-term reversal).
+#   - Uses RANK normalization rather than z-score — matches the HHRZ
+#     paper and is more robust to fat tails at 5-day horizon.
+#
+# Feature panel (9 documented anomalies, one per family)
+# ------------------------------------------------------
+# Each feature represents a distinct economic mechanism with published
+# attribution. The features that survive L1 selection on this universe
+# at 5-day horizon are themselves the empirical finding.
+#
+#   1. momentum_12_1     - Jegadeesh-Titman (1993). 12-month cross-
+#                          sectional momentum, skipping last 21 days.
+#                          The canonical factor.
+#
+#   2. momentum_756      - 36-month trailing log return. Captures
+#                          secular drift / long-horizon trend
+#                          (Moskowitz-Ooi-Pedersen 2012 TSMOM-adjacent).
+#                          Empirically positive on this universe per
+#                          the apples-to-apples diagnostic.
+#
+#   3. return_1d         - Lehmann (1990) / Jegadeesh (1990) short-term
+#                          reversal. Documented to be negative at
+#                          short horizons.
+#
+#   4. vol_ewm_20        - EWM-20 realized vol. Ang-Hodrick-Xing-Zhang
+#                          (2006) low-vol anomaly territory; textbook
+#                          sign is NEGATIVE. Empirical sign on this
+#                          universe post-2022 is POSITIVE (anti-low-vol
+#                          regime).
+#
+#   5. idio_vol_20       - Idiosyncratic vol from 60-day rolling beta
+#                          regression residuals. Ang-Hodrick-Xing-Zhang
+#                          (2006) idiosyncratic-vol anomaly — distinct
+#                          from total vol.
+#
+#   6. max_return_21d    - Bali-Cakici-Whitelaw (2011) MAX effect.
+#                          Textbook sign NEGATIVE (tail-event
+#                          underperformance). Empirical sign on this
+#                          universe POSITIVE.
+#
+#   7. distance_52w_high - George-Hwang (2004) 52-week-high effect.
+#                          Tickers near their 52-week high tend to
+#                          continue (anchor / behavioral momentum).
+#
+#   8. log_dollar_volume - Amihud (2002) liquidity proxy / size effect
+#                          via dollar-volume. Standard control in
+#                          factor-zoo work.
+#
+#   9. beta_60           - Frazzini-Pedersen (2014) BAB / market
+#                          exposure control. Required by the E-LASSO
+#                          recipe so other coefficients represent alpha
+#                          after market exposure.
+#
+# Notably absent (because the project does not load fundamentals):
+#   - Value (B/P, E/P) — Fama-French (1992)
+#   - Profitability (ROE, ROA) — Novy-Marx (2013), Fama-French (2015)
+#   - Investment (asset growth) — Cooper-Gulen-Schill (2008)
+#
+# Those families are not in the feature registry. This panel is the
+# COMPLETE set of well-documented TECHNICAL anomalies on the
+# project's data. A fundamentals-bearing E-LASSO would be a separate
+# experiment requiring a data-layer expansion.
+#
+# Hypotheses being tested
+# -----------------------
+# H_strong_baseline: a curated multi-anomaly E-LASSO produces full-
+#   sample IC in the +0.015 to +0.025 range — competitive with or
+#   above mom_12_1's +0.0162 — and post-Oct-2022 IC in the +0.020 to
+#   +0.030 range. If confirmed, this becomes the strong academic
+#   baseline that any ML comparison must clear.
+#
+# H_collinearity_was_the_problem (final form): the earlier Lasso runs
+#   failed because of collinear panel design, not because pooled
+#   Lasso is structurally broken on this universe. The one-per-family
+#   panel + rank normalization should let L1 produce a clean sparse
+#   solution with the strongest documented anomalies surviving.
+#
+# H_pooled_still_fails: if even this carefully-curated panel produces
+#   near-zero IC, the conclusion is that pooled cross-sectional
+#   coefficient estimation is fundamentally regime-fragile on liquid
+#   US large-caps — the per-ticker MLE estimator (ARIMA, GBM) is
+#   structurally superior at this universe / horizon. That's also a
+#   defensible finding, more interesting than the first.
+#
+# Walk-forward / normalization
+# ----------------------------
+# Annual refit (252d) matches the slow nature of the surviving signal
+# on this universe. Rank normalization within each date is more robust
+# to fat tails than z-score and matches the HHRZ paper's setup. The
+# CV picks alpha per refit; the resulting coefficients should be stable
+# across refits if the signal is genuinely there.
+#
+# Wall-clock: ~5-10 min, same scale as prior Lasso runs.
+
+experiment_id: lasso_elasso_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_756
+  - return_1d
+  - vol_ewm_20
+  - idio_vol_20
+  - max_return_21d
+  - distance_52w_high
+  - log_dollar_volume
+  - beta_60
+
+normalize_kind: rank
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_elasso_baseline
+    class: ZeroPredictor
+    params: {}
+
+  - id: lasso_elasso_pit_v1
+    class: LassoCrossSectional
+    params:
+      cv: 5
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true
+      # alphas: null → use sklearn's default geometric grid (100 values)

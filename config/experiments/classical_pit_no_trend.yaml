@@ -1,0 +1,58 @@
+# ARIMA(1, 0, 1) with NO INTERCEPT on the PIT-corrected universe.
+#
+# Diagnostic purpose
+# ------------------
+# Falsification experiment for the claim that ARIMA's cross-sectional IC
+# on this universe comes from its constant trend term (mathematically
+# equivalent to ranking by long-horizon trailing log-return) rather than
+# from its AR(1) or MA(1) terms.
+#
+# If the constant is what drives the signal:
+#   - With `trend='n'`, the per-ticker drift estimate disappears
+#   - The 5-step forecast collapses to phi^5 · y_T + small MA contribution
+#   - On liquid equities |phi| < 0.1 → phi^5 < 1e-5 → forecast magnitude
+#     is dominated by sampling noise
+#   - Expected post-Oct-2022 IC: near zero (within ~+/-0.003)
+#
+# If the AR/MA terms drive the signal:
+#   - The forecast retains phi · y_T structure
+#   - Cross-sectional ranking still meaningful
+#   - Expected IC: positive but smaller than the with-intercept version
+#
+# Outcome interpretation:
+#   IC ≈ 0  → confirms the intercept-as-momentum hypothesis. ARIMA's
+#             cross-sectional signal IS the trailing-mean-return signal.
+#   IC > +0.005 → AR/MA terms carry genuine cross-sectional signal that
+#             would not be captured by a pure momentum factor.
+#
+# Wall-clock: same as classical_pit (~3-4 hours for ARIMA fits across
+# 617 tickers x 7-8 annual refits). Pure CPU.
+
+experiment_id: classical_pit_no_trend_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features: []
+normalize_kind: none
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_no_trend
+    class: ZeroPredictor
+    params: {}
+
+  - id: arima_no_trend_pit_v1
+    class: ArimaPerTicker
+    params:
+      order: [1, 0, 1]
+      trend: n                   # NO constant; AR(1) + MA(1) only
+      min_history: 252
+      horizon_days: 5

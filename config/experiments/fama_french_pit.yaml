@@ -1,0 +1,72 @@
+# Fama-French 5-factor baseline on the PIT-corrected universe.
+#
+# Purpose: place the industry-standard cross-sectional factor model
+# (Fama-MacBeth two-pass on Ken French 5 factors: MKT-RF, SMB, HML, RMW,
+# CMA) on the same sp500_pit universe with pit_filter=true as the primary
+# LightGBM experiment (extended_kaggle_v2_ohlcv) and the classical_pit
+# baselines. The resulting IC and Sharpe are the documented-factor
+# benchmark the primary LightGBM model should be compared against.
+#
+# Expected result: FF5 on US large-caps captures the size, value,
+# profitability, investment, and (via the MKT exposure) market signals.
+# Momentum is NOT in the canonical FF5 — Carhart's MOM factor was a 1997
+# addition. On this universe FF5 IC is typically in the +0.005 to +0.015
+# range; lower than ARIMA-annual-refit (which accidentally implements
+# momentum) but a more principled documented-factor baseline.
+#
+# Methodology notes:
+# - Two-pass Fama-MacBeth: time-series regression of each ticker's
+#   excess return on the K factor returns gives K loadings beta_i;
+#   cross-sectional regression of next-period excess returns on the
+#   beta_i gives K risk premia lambda_t per date; r_hat_i = beta_i .
+#   lambda_bar (rolling average of recent lambda).
+# - Refit cadence: quarterly (63 days). Factor models are cheap to fit
+#   (per-ticker OLS + per-date cross-sectional regression). Quarterly
+#   is conventional in the literature; matches the existing
+#   fama_french.yaml on top20.
+# - lambda_window: 60 days. The rolling window over which the cross-
+#   sectional risk premia are averaged before forecasting.
+#
+# Data dependency: Ken French daily 5-factor file. First run downloads
+# ~1MB; subsequent runs read from data/raw/. KF data lags ~3-6 weeks
+# behind today, so the panel end is locked here to match the KF feed.
+# Bump `end:` when KF refreshes.
+#
+# Wall-clock: ~5-15 min on the 617-ticker PIT universe with quarterly
+# refit. Pure CPU; no GPU; per-ticker OLS is parallelizable in principle
+# but the current harness fits sequentially.
+
+experiment_id: fama_french_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true                # PIT correction ON — matches primary experiment
+  # Lock the panel end to where the Ken French feed publishes. KF
+  # updates monthly around the 5th-10th of the following month, so the
+  # daily series typically lags ~3-6 weeks behind today. Running past
+  # KF's last date silently nulls the factor-loading features for
+  # affected rows. Bump this when KF refreshes.
+  end: '2026-03-31'
+
+features: []                       # FF model consumes adj_close + KF factors only
+normalize_kind: none
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 63              # quarterly — factor models are cheap to refit
+  embargo_days: 6
+  min_train_days: 504              # ~2y of context before the first refit
+
+models:
+  - id: zero_v1_ff_pit
+    class: ZeroPredictor
+    params: {}
+
+  - id: ff_factor_pit_v1
+    class: FamaFrenchFactorModel
+    params:
+      factors: [MKT_RF, SMB, HML, RMW, CMA]
+      min_history: 252             # skip tickers with < 1y of usable PIT data
+      horizon_days: 5
+      lambda_window: 60            # rolling 60-day average of cross-sectional λ

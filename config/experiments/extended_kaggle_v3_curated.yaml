@@ -1,0 +1,183 @@
+# Audit-driven curated LightGBM panel: 14 features, designed from
+# measured gain importance and cross-feature correlation rather than priors.
+#
+# Diagnostic basis (scripts/audit_lightgbm_features.py on v2_ohlcv)
+# -----------------------------------------------------------------
+# The audit revealed three structural facts about the 21-feature
+# `extended_kaggle_v2_ohlcv` panel that motivate redesign:
+#
+# 1. THREE FEATURES PRODUCED 39% OF GAIN. The tree's split capacity is
+#    not uniformly distributed:
+#       abnormal_volume          22.4%   ← #1
+#       distance_52w_high         9.4%   ← #2
+#       mom60_minus_dist_ma200    9.3%   ← #3
+#    The "abnormal_volume is dead weight on liquid universes" prior I
+#    had been carrying is decisively falsified. The "mom60_minus_dist_ma200
+#    is a composite of weak signals" prior is also falsified.
+#
+# 2. HEAVY WITHIN-FAMILY COLLINEARITY. 26 feature pairs have
+#    |Pearson r| > 0.7, clustering into three groups:
+#       Vol cluster (7 features): vol_20, vol_ewm_20, parkinson_vol_20,
+#         idio_vol_20, vol_20_rank, vol_20_cs_min_dist, max_return_21d.
+#         Within-cluster winner by gain: max_return_21d.
+#       Trend cluster (5 features): momentum_60, momentum_60_rank,
+#         distance_ma_200, distance_ma_200_rank, distance_52w_high.
+#         Within-cluster winner by gain: distance_52w_high.
+#       Intraday cluster (2 features): range_ratio, body_ratio.
+#         Within-cluster winner by gain: range_ratio.
+#
+# 3. STANDALONE STRENGTH ≠ TREE-IMPORTANCE. momentum_12_1 produces the
+#    project's highest single-factor gross IC (+0.0162) but only 3.4%
+#    of tree gain (rank 10). The tree spreads weight across the panel
+#    rather than concentrating on the best single feature — a
+#    structural property of boosted trees worth being explicit about.
+#
+# Panel design rationale
+# ----------------------
+# Eight features from the audit-strict core:
+#   1. abnormal_volume         — #1 audit gain
+#   2. distance_52w_high       — #2 audit gain; cluster-2 winner
+#   3. mom60_minus_dist_ma200  — #3 audit gain
+#   4. return_5d               — #4 audit gain
+#   5. max_return_21d          — #5 audit gain; cluster-1 winner
+#   6. momentum_12_1           — strongest standalone signal (gross IC +0.0162)
+#   7. rsi_14                  — modest gain, no cluster — oscillator info
+#   8. log_dollar_volume       — modest gain, liquidity control
+#
+# Two cluster secondaries to preserve interaction surface (we measured
+# that pared 10-feature panel underperformed 22-feature, so going below
+# ~10 features loses interaction-driven IC):
+#   9. vol_ewm_20              — cluster-1 secondary, gain 3.9%
+#  10. momentum_60_rank        — cluster-2 secondary, gain 3.6%
+#
+# Three diagnostic-justified additions not in v2_ohlcv:
+#  11. cs_return_dispersion_20  — regime indicator (NEW). Contemporaneously-
+#                                 observable cross-sectional return dispersion;
+#                                 lookahead-safe alternative to hindsight-
+#                                 labeled regime models. Tree can condition
+#                                 splits on this without seeing regime labels.
+#  12. sector_relative_return_5d — regime-complementary signal (NEW). Strongest
+#                                 single signal in the pre-Oct-2022 transition
+#                                 regime (+0.0154 IC); fills the regime where
+#                                 momentum factors fail.
+#  13. momentum_504            — long-horizon momentum (NEW). Dominant in
+#                                 post-Jan-2024 regime (IC +0.0298 standalone).
+#                                 The current v2_ohlcv has only mom_12_1;
+#                                 adding mom_504 gives the tree access to the
+#                                 24-month-window signal that drives the
+#                                 post-AI regime.
+#  14. beta_60                 — Frazzini-Pedersen market-exposure control
+#                                 (NEW). Standard E-LASSO recipe control;
+#                                 useful as an interaction term for tree.
+#
+# DROPPED from v2_ohlcv (8 features):
+#   - vol_20, vol_20_rank, vol_20_cs_min_dist, parkinson_vol_20, idio_vol_20:
+#     redundant with max_return_21d + vol_ewm_20 (cluster-1)
+#   - momentum_60, distance_ma_200, distance_ma_200_rank:
+#     redundant with distance_52w_high + momentum_60_rank (cluster-2)
+#   - body_ratio: redundant with range_ratio (cluster-3)
+#     [actually range_ratio also dropped — its gain was 1.2%, and it's
+#     in a 2-feature cluster — keep neither]
+#   - return_1d: bottom-5 by audit gain (2.1%)
+#
+# Total: 14 features (vs 21 in v2_ohlcv). 8 dropped + 7 kept from v2_ohlcv
+# + 7 changed/added (some kept-as-secondary + 4 net new).
+#
+# Hyperparameters
+# ---------------
+# IDENTICAL to extended_kaggle_v2_ohlcv. The comparison isolates the
+# FEATURE PANEL effect, not model capacity.
+#
+# Hypotheses being tested
+# -----------------------
+# H_audit: an audit-driven 14-feature curated panel matches or exceeds
+#   the original 21-feature panel on full-sample gross IC and tightens
+#   regime variance (less pre-Oct-2022 collapse). The pared 10-feature
+#   panel underperformed because I dropped audit-high-importance features
+#   like abnormal_volume and mom60_minus_dist_ma200; this curated panel
+#   keeps them.
+#
+# H_regime_indicator: with cs_return_dispersion_20 as a contemporaneously-
+#   observable conditioning variable, the tree's pre-Oct-2022 IC moves
+#   from ≈ 0 (v2_ohlcv) toward positive territory. The regime indicator
+#   gives the tree the information needed to flip toward reversal
+#   direction in high-dispersion regimes.
+#
+# H_long_horizon_momentum: adding momentum_504 (in addition to mom_12_1)
+#   improves post-Jan-2024 regime IC, where long-horizon momentum factors
+#   dominate (mom_504 standalone IC +0.0298 in post-AI regime; v2_ohlcv
+#   gross IC in that regime is only +0.0135).
+#
+# H_microstructure_useful: sector_relative_return_5d adds regime-complementary
+#   signal not available in v2_ohlcv. Pre-Oct-2022 regime: it's the
+#   single strongest factor (+0.0154 IC). With it in the tree's panel,
+#   the tree can exploit the regime-complementarity between momentum and
+#   reversal.
+#
+# Outcome interpretation
+# ----------------------
+# Full-sample gross IC > +0.0114 (v2_ohlcv): curation helped.
+# Full-sample gross IC ≈ +0.0114: curation neutral but with simpler panel
+#   and lower turnover plausible from fewer fast-changing features.
+# Full-sample gross IC < +0.010: the dropped features were still doing
+#   work via low-importance-but-non-zero interaction effects that the
+#   audit understated.
+
+experiment_id: extended_kaggle_v3_curated
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # Audit-strict core (8 features) — empirically validated high gain
+  - abnormal_volume
+  - distance_52w_high
+  - mom60_minus_dist_ma200
+  - return_5d
+  - max_return_21d
+  - momentum_12_1
+  - rsi_14
+  - log_dollar_volume
+  # Cluster secondaries for interaction surface (2)
+  - vol_ewm_20
+  - momentum_60_rank
+  # Regime indicator (NEW)
+  - cs_return_dispersion_20
+  # Regime-complementary microstructure signal (NEW)
+  - sector_relative_return_5d
+  # Long-horizon momentum — post-Jan-2024 dominator (NEW to LightGBM panel)
+  - momentum_504
+  # Market-exposure control (NEW to LightGBM panel)
+  - beta_60
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_ohlcv_curated
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v3_curated
+    class: LightGBMModel
+    params:
+      # IDENTICAL to extended_kaggle_v2_ohlcv. Isolates feature-panel effect.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]

@@ -1,0 +1,108 @@
+# Ridge regression on the same 12-feature panel as lasso_pit_v1.
+#
+# Methodological reference
+# ------------------------
+# Gu-Kelly-Xiu (2020, RFS) "Empirical Asset Pricing via Machine Learning"
+# uses Ridge / Elastic Net as the linear regularized baseline against
+# which heavier ML methods (random forest, gradient boosting, neural
+# networks) are judged. Avramov-Cheng-Metzker (2023, JoF) likewise. The
+# standard regularized linear baseline in the cross-sectional asset-
+# pricing literature is L2 / Ridge or L1+L2 / Elastic Net, NOT pure L1 /
+# Lasso, because the documented characteristic panel has known
+# collinearity (multiple momentum windows, multiple vol measures, etc.)
+# and L2 handles collinearity smoothly while L1 does not.
+#
+# Why this experiment exists
+# --------------------------
+# The project's `lasso_pit_v1` (12 features) produced near-zero IC and
+# `lasso_pit_v2` (5 features, one-per-family) produced significantly
+# NEGATIVE IC. The diagnostic that motivated this experiment: L1's
+# failure mode on collinear panels is to split correlated columns into
+# cancelling signs (mom_504 = -0.000612 vs mom_378 = +0.000572 in v1).
+# This is a well-known L1 pathology and is NOT a failure of pooled-
+# coefficient linear modeling generally — Ridge (L2) does not have this
+# pathology because L2 shrinks all coefficients smoothly toward zero
+# proportional to their squared magnitude, distributing weight across
+# correlated features rather than picking arbitrary winners.
+#
+# The L1-vs-L2 contrast on the SAME feature panel quantifies how much
+# of the Lasso failure was L1-specific. If Ridge produces meaningfully
+# higher IC than Lasso (e.g. +0.012 vs +0.002), the failure was the
+# choice of penalty, not the choice of model class — and Ridge becomes
+# the proper Tier-2 regularized-linear baseline for the project. If
+# Ridge also produces near-zero IC, the pooled-coefficient mechanism is
+# structurally broken on this universe regardless of penalty form, and
+# the project's per-ticker MLE finding stands.
+#
+# Feature panel — IDENTICAL to lasso_pit_v1
+# -----------------------------------------
+# The point is to isolate the penalty effect, not the panel effect. The
+# 12-feature panel includes intentional within-family redundancy
+# (four momentum windows, three vol measures) so that L1's collinearity
+# failure mode is exercised. Ridge should produce a coherent solution
+# on the same panel where Lasso fragmented.
+#
+# Hyperparameters
+# ---------------
+# RidgeCV with a 20-point log-spaced alpha grid (1e-4 to 1e4) and 5-fold
+# cross-validation. Matches Lasso's cv setup so the L1-vs-L2 comparison
+# is strictly about the penalty type.
+#
+# Hypothesis being tested
+# -----------------------
+# H_penalty_not_panel: Ridge on the 12-feature panel produces gross IC
+#   in the +0.008 to +0.018 range — substantially above Lasso v1's
+#   +0.002, comparable to single-factor mom_12_1 — and the fitted
+#   coefficients distribute weight smoothly across collinear momentum
+#   and vol siblings rather than splitting them into cancelling signs.
+#   If confirmed, Ridge replaces Lasso as the project's Tier-2 baseline.
+#
+# H_pooled_broken: if Ridge IC also lands near zero, pooled-coefficient
+#   linear modeling is structurally underpowered on this universe at
+#   this horizon, independent of penalty form. Either outcome is a
+#   defensible empirical finding.
+#
+# Wall-clock: ~5-10 min, same scale as the Lasso runs.
+
+experiment_id: ridge_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # Same 12 features as lasso_pit_v1 — isolating penalty effect
+  - momentum_504
+  - momentum_378
+  - momentum_12_1
+  - momentum_756
+  - vol_20
+  - vol_ewm_20
+  - parkinson_vol_20
+  - log_dollar_volume
+  - beta_60
+  - max_return_21d
+  - body_ratio
+  - range_ratio
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_ridge_baseline
+    class: ZeroPredictor
+    params: {}
+
+  - id: ridge_pit_v1
+    class: RidgeCrossSectional
+    params:
+      cv: 5
+      fit_intercept: true
+      # alphas: null → use a 20-point log-spaced grid from 1e-4 to 1e4
+      #   (set by RidgeCrossSectional._params when alphas is unspecified)

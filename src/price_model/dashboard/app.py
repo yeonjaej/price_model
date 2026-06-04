@@ -20,17 +20,25 @@ st.set_page_config(
 
 st.title("price-model")
 st.caption(
-    "Cross-sectional equity return predictor — benchmarks Fama-French, ARIMA/GARCH, "
-    "LightGBM, and the Chronos foundation model on the S&P 500."
+    "Cross-sectional equity return predictor on the S&P 500 — benchmarks linear "
+    "(HHRZ E-LASSO, Ridge, Lasso), single-factor (Jegadeesh-Titman momentum, ARIMA), "
+    "tree (LightGBM/XGBoost/CatBoost), and Fama-French models under strict HP-free "
+    "held-out evaluation."
 )
 
 st.info(
-    "**What a prediction means here.** Every model in this dashboard produces a "
-    "**5-day forward excess return** for each stock — i.e. the model's forecast of how "
-    "much the stock will out- or under-perform the cross-sectional average over the "
-    "next 5 trading days, expressed as a log-return decimal. A prediction of `+0.005` "
-    "means *+0.5% relative to the universe mean over the next week*. Models are honest "
-    "about scale only on rank; treat the magnitude as a rough confidence indicator."
+    "**Headline result.** On the 2025+ out-of-sample slice at 21-day forward horizon, "
+    "the **Han-He-Rapach-Zhou (2024) E-LASSO recipe** (`lasso_elasso_pit_h21`) — "
+    "L1-regularized linear regression on 9 documented academic anomalies — produces "
+    "the strongest gross signal (IC +0.0697, t=+5.24). On net-of-cost Sharpe, "
+    "long-horizon momentum (`mom_756_factor_h21`) wins (+1.80 net at 20bp vs HHRZ's "
+    "+1.17) because of 8× lower turnover. **Both decisively beat every ML variant**, "
+    "including Optuna-tuned LightGBM with held-out HP selection. See the README for "
+    "the three-claim structure and the methodology appendix.\n\n"
+    "**What a prediction means here.** Each model produces a **forward excess return** "
+    "for each stock — the model's forecast of how much the stock will out- or "
+    "under-perform the cross-sectional average, expressed as a log-return decimal. "
+    "Treat magnitude as a rough confidence indicator; rank is what matters for IC."
 )
 
 store = get_store()
@@ -52,8 +60,8 @@ cols[1].metric(
 cols[2].metric(
     "Latest prediction date",
     str(health["latest_date"] or "—"),
-    help="Most recent prediction_date in the store. Predictions are 5 trading days "
-    "ahead of this date.",
+    help="Most recent prediction_date in the store. Forecast horizon depends "
+    "on the model (5 trading days for most; 21 trading days for `_h21` variants).",
 )
 cols[3].metric(
     "Tickers seen",
@@ -85,7 +93,7 @@ st.markdown(
 with st.expander("Reading the numbers — quick glossary", expanded=False):
     st.markdown(
         """
-- **Prediction**: 5-day forward excess return, log-return decimal. `+0.01` ≈ 1% over the next week relative to the universe mean.
+- **Prediction**: forward excess return, log-return decimal. Horizon is 5 days for most models, 21 days for `_h21` variants. `+0.01` ≈ 1% over the horizon relative to the universe mean.
 - **Information Coefficient (IC)**: Spearman rank correlation between predicted and realized returns, averaged across dates. Measures how well a model *ranks* names. >0.02 with t-stat >2 is real signal on this kind of universe; >0.05 is genuinely good.
 - **Hit rate**: fraction of predictions where the sign agrees with the realized sign. 0.5 = coin flip. 0.52-0.55 is typical of weakly profitable signals.
 - **Long-short Sharpe**: annualized Sharpe ratio of a daily-rebalanced portfolio that goes long the top decile, short the bottom decile. Above 1 is the bar for "would actually trade this."

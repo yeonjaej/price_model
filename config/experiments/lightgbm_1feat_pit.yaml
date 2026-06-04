@@ -1,0 +1,71 @@
+# 1-feature LightGBM on the PIT-corrected universe — the extreme
+# parsimony test.
+#
+# Diagnostic purpose
+# ------------------
+# Tests the most aggressive form of the H1 hypothesis: does a LightGBM
+# trained on momentum_12_1 *alone* reproduce ARIMA's IC?
+#
+# If yes, the tree's whole job collapses to "rank by the input
+# feature" — which on a single feature is just a monotone transform.
+# The result would confirm that the 22-feature engineering was net
+# noise on this universe and the underlying signal is purely the
+# Jegadeesh-Titman 12-1 momentum anomaly.
+#
+# If no (1-feature LightGBM has materially different IC from ARIMA),
+# something other than feature set must explain ARIMA's advantage —
+# possibly the cross-sectional normalization, refit cadence asymmetry,
+# or per-ticker fit structure of ARIMA.
+#
+# Why this is informative beyond Experiment 1: in the 5-feature
+# version, the tree still has cross-feature interaction capacity. In
+# the 1-feature version, there's nothing to interact with — the tree
+# becomes a single-feature ranker. If the 1-feature LightGBM is
+# essentially equivalent to ARIMA on this metric, the comparison
+# isolates the *feature signal* from the *model class*.
+#
+# All hyperparameters and walk-forward settings are IDENTICAL to
+# extended_kaggle_v2_ohlcv.yaml.
+
+experiment_id: lightgbm_1feat_pit
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_1feat
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_1feat_pit_v1
+    class: LightGBMModel
+    params:
+      # Hyperparams identical to extended_kaggle_v2_ohlcv.yaml.
+      # With only one input feature the tree's effective capacity is
+      # bounded by feature granularity, not num_leaves; keeping the
+      # config identical lets the comparison stay clean.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]

@@ -11,11 +11,12 @@ st.title("Stock detail")
 
 st.info(
     "**Per-ticker view of every model's prediction history.** Each line is one "
-    "model's forecast of the next 5-day excess return for the selected stock. "
-    "The dotted gray line at zero marks the universe mean — anything above means "
-    "the model expects out-performance; below means under-performance. **When the "
-    "lines move together, the signal is robust. When they fan out, models disagree "
-    "and you should be cautious.**"
+    "model's forecast of the next forward excess return for the selected stock. "
+    "Most models predict 5-day returns; models with `_h21` in their name predict "
+    "21-day returns. The dotted gray line at zero marks the universe mean — "
+    "anything above means the model expects out-performance; below means "
+    "under-performance. **When the lines move together, the signal is robust. "
+    "When they fan out, models disagree and you should be cautious.**"
 )
 
 store = get_store()
@@ -40,18 +41,18 @@ if hist.height == 0:
     st.info("No predictions stored for this ticker.")
     st.stop()
 
-st.subheader(f"Predicted 5-day excess return — {ticker}")
+st.subheader(f"Predicted forward excess return — {ticker}")
 fig = px.line(
     hist.to_pandas(),
     x="prediction_date",
     y="prediction",
     color="model_id",
-    title=f"{ticker} predictions over time (decimal log-return; +0.01 ≈ +1% vs. universe over next 5 days)",
+    title=f"{ticker} predictions over time (decimal log-return; horizon = 5d for most models, 21d for _h21 variants)",
 )
 fig.add_hline(y=0, line_dash="dot", line_color="gray")
 fig.update_layout(
     xaxis_title="Prediction date (the date the forecast was made)",
-    yaxis_title="Predicted forward excess return (5-day, decimal)",
+    yaxis_title="Predicted forward excess return (decimal log-return)",
     legend_title="Model",
 )
 st.plotly_chart(fig, width="stretch")

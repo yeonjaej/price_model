@@ -1,0 +1,69 @@
+# CatBoost on the v3_curated 14-feature panel.
+#
+# Sister experiment to extended_kaggle_v3_curated.yaml — identical feature
+# panel, identical walk-forward harness, identical refit cadence, identical
+# universe. Only the model class changes: CatBoost instead of LightGBM.
+#
+# Purpose: produce a third decorrelated tree-model prediction stream for the
+# stacking ensemble. CatBoost's oblivious (symmetric) tree growth and Ordered
+# Boosting regularization produce predictions that are typically correlated
+# ~0.6-0.8 with both LightGBM and XGBoost — sometimes lower, particularly
+# when overfitting is severe in the other libraries.
+#
+# Hyperparameters are conservative-by-default; CatBoost's Ordered Boosting
+# provides built-in overfitting control, so we don't need as aggressive
+# regularization as LightGBM/XGBoost.
+
+experiment_id: extended_kaggle_v3_catboost
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # Same 14 features as extended_kaggle_v3_curated.yaml.
+  - abnormal_volume
+  - distance_52w_high
+  - mom60_minus_dist_ma200
+  - return_5d
+  - max_return_21d
+  - momentum_12_1
+  - rsi_14
+  - log_dollar_volume
+  - vol_ewm_20
+  - momentum_60_rank
+  - cs_return_dispersion_20
+  - sector_relative_return_5d
+  - momentum_504
+  - beta_60
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_v3_catboost_baseline
+    class: ZeroPredictor
+    params: {}
+
+  - id: catboost_v3_curated
+    class: CatBoostModel
+    params:
+      # Kaggle-reasonable hyperparameters for tabular regression. CatBoost's
+      # Ordered Boosting handles overfitting better than LightGBM/XGBoost,
+      # so we use moderate depth and standard regularization.
+      learning_rate: 0.05
+      depth: 6
+      l2_leaf_reg: 5.0
+      rsm: 0.8
+      subsample: 0.8
+      bootstrap_type: Bernoulli
+      n_estimators: 500
+      val_fraction: 0.10
+      early_stopping_rounds: 50
+      seeds: [42, 2024, 12345]

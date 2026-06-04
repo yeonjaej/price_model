@@ -66,41 +66,52 @@ class LastReturnPredictor(Model):
 class MomentumFactor(Model):
     """Cross-sectional documented-factor baseline: rank tickers by a single feature.
 
-    This is the literature-standard "naive momentum factor" baseline for
-    cross-sectional ML evaluation on US equities. The prediction on date `t`
-    for ticker `i` is just the value of the configured feature (typically
-    `momentum_504`, `momentum_378`, or `momentum_12_1`) for that
-    `(t, i)`. No training, no hyperparameters — the model is the feature.
+    This is the literature-standard "naive factor" baseline for cross-sectional
+    ML evaluation on US equities. The prediction on date `t` for ticker `i` is
+    `sign * feature_value(t, i)` for the configured feature. No training, no
+    hyperparameters — the model is the feature.
 
-    Configure via `config.params["feature_name"]`. The named feature must
-    appear in `config.feature_cols` so the harness routes it through the
-    feature pipeline. Example YAML:
+    Configure via `config.params`:
+      - `feature_name` (required): the feature to rank on
+      - `sign` (default +1): +1 for momentum-direction factors; -1 for
+        reversal-direction factors (Lehmann 1990 / Jegadeesh 1990 short-term
+        reversal). With sign=-1 the IC will be POSITIVE when high recent
+        returns predict LOW future returns — the canonical daily-horizon
+        anomaly direction. This keeps all model_id comparisons in the table
+        like-for-like: a positive IC is "the factor works as predicted."
 
-        - id: momentum_504_factor
+    Example YAML:
+
+        # Momentum direction (JT canonical)
+        - id: mom_504_factor
           class: MomentumFactor
           features: [momentum_504]
           params:
             feature_name: momentum_504
+            sign: 1
+
+        # Reversal direction (Lehmann canonical, daily horizon)
+        - id: reversal_1d_factor
+          class: MomentumFactor
+          features: [return_1d]
+          params:
+            feature_name: return_1d
+            sign: -1
 
     Why this exists
     ---------------
-    Prior comparisons in the project used `ArimaPerTicker` as the "classical"
-    baseline, but at annual-refit cadence ARIMA's forecast is dominated by
-    its constant trend term, which is `≈ mean(log_return)` over the training
-    window — operationally identical to ranking by trailing momentum. So
-    "LightGBM vs ARIMA" has been "LightGBM vs naive momentum factor"
-    indirectly. This class makes the comparison direct, matching the
-    convention in Gu-Kelly-Xiu (2020), Avramov-Cheng-Metzker (2023), and
-    Han-He-Rapach-Zhou (2024), where the cross-sectional ML model is judged
-    against an explicit documented factor — not a time-series wrapper.
+    The project's cross-sectional comparisons need a literature-canonical
+    single-factor baseline at the Tier-1 level: "do you have signal beyond
+    the most-documented anomaly for this horizon?" At daily / 5-day-forward
+    horizons, the canonical anomaly is short-term reversal, not Jegadeesh-
+    Titman 12-1 month momentum (which is the *monthly* canonical). Both
+    directions are useful comparison rows depending on the regime under
+    study. The `sign` flag makes this clean without proliferating model
+    classes.
 
-    No fit step is required: the predict step simply returns the feature's
-    value, which the walk-forward harness will compare to forward excess
-    returns. The cross-sectional ranking it induces is the entire signal.
-    Per-date cross-sectional demeaning is applied at the eval layer
-    (the target `y` is already cross-sectionally demeaned), so this
-    baseline's IC is the univariate cross-sectional IC of the named
-    feature.
+    Per-date cross-sectional demeaning is applied at the eval layer (the
+    target `y` is already cross-sectionally demeaned), so this baseline's
+    IC is the univariate cross-sectional IC of `sign * feature`.
     """
 
     def fit(self, panel: pl.DataFrame) -> None:
@@ -112,12 +123,18 @@ class MomentumFactor(Model):
                 f"MomentumFactor: feature_name {feature_name!r} not in feature_cols "
                 f"{self.config.feature_cols!r}"
             )
+        # Coerce sign to ±1; default to +1 (momentum direction). Anything else
+        # is a config error.
+        sign = self.config.params.get("sign", 1)
+        if sign not in (1, -1, 1.0, -1.0):
+            raise ValueError(f"MomentumFactor: sign must be +1 or -1, got {sign!r}")
         self._fitted = True
 
     def predict(self, panel: pl.DataFrame) -> pl.DataFrame:
         self._check_fitted()
         feature_name = self.config.params["feature_name"]
-        preds = panel[feature_name].to_numpy()
+        sign = float(self.config.params.get("sign", 1))
+        preds = sign * panel[feature_name].to_numpy()
         return self._format_predictions(panel, preds)
 
     def save(self, path: Path) -> None:

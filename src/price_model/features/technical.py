@@ -504,3 +504,119 @@ class MaxReturn21d(Feature):
             pl.col("_dret").rolling_max(window_size=21).over("ticker").alias(self.name)
         )
         return out.drop("_dret")
+
+
+# -----------------------------------------------------------------------------
+# Microstructure features for 5-day-horizon cross-sectional prediction.
+#
+# The literature on short-horizon cross-sectional return prediction
+# (Lehmann 1990, Jegadeesh 1990, Lou-Polk-Skouras 2019, Amihud 2002) places
+# the relevant alpha in microstructure / price-volume decompositions, not
+# in slow factors. These three features fill the gap in the project's
+# panel where 5-day-forward signal mechanistically lives.
+# -----------------------------------------------------------------------------
+
+
+@register
+class OvernightReturn1d(Feature):
+    """Log return from previous close to current open: `log(adj_open_t / adj_close_{t-1})`.
+
+    Lou-Polk-Skouras (2019, JFE) "Comomentum: Inferring Arbitrage Activity
+    from Return Correlations" and the broader overnight-vs-intraday literature
+    establish that overnight returns CONTINUE (positive autocorrelation) on US
+    equities, while intraday returns REVERSE — opposite-signed short-horizon
+    persistence between the two components of the daily bar. This is the
+    single most-documented microstructure decomposition of the daily return.
+
+    Implementation detail: yfinance reports raw `open` and split-adjusted
+    `adj_close`. To compute a split-consistent overnight return across day
+    boundaries we apply the adjustment factor implicit in adj_close:
+        adj_open = open · (adj_close / close)
+    This matches the convention used by `AbnormalVolume` for the volume
+    adjustment. The decomposition then satisfies:
+        overnight_return_1d + intraday_return_1d = log(adj_close_t / adj_close_{t-1})
+    which is the full daily log return.
+    """
+
+    name = "overnight_return_1d"
+    inputs = ("open", "close", "adj_close")
+    lookback_days = 1
+
+    def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
+        # Adjustment factor from raw close to adj_close — applied to raw open
+        # to recover an adj_open compatible with adj_close across split dates.
+        adj_factor = pl.col("adj_close") / pl.when(pl.col("close") > 1e-9).then(
+            pl.col("close")
+        ).otherwise(1e-9)
+        adj_open = pl.col("open") * adj_factor
+        panel = panel.with_columns(adj_open.alias("_adj_open"))
+        prev_adj_close = pl.col("adj_close").shift(1).over("ticker")
+        overnight = pl.col("_adj_open").log() - prev_adj_close.log()
+        out = panel.with_columns(overnight.over("ticker").alias(self.name))
+        return out.drop("_adj_open")
+
+
+@register
+class IntradayReturn1d(Feature):
+    """Log return from open to close on the same day: `log(adj_close_t / adj_open_t)`.
+
+    The intraday complement to `overnight_return_1d`. Mechanically reverses at
+    short horizons on US equities (Lou-Polk-Skouras 2019) — opposite-signed
+    persistence vs the overnight component. A daily-rebalance strategy that
+    treats overnight and intraday returns as separate signals (long on positive
+    overnight, short on positive intraday) systematically extracts something
+    that raw `return_1d` averages away.
+
+    Uses the same split-adjustment as `OvernightReturn1d` for consistency.
+    """
+
+    name = "intraday_return_1d"
+    inputs = ("open", "close", "adj_close")
+    lookback_days = 0
+
+    def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
+        adj_factor = pl.col("adj_close") / pl.when(pl.col("close") > 1e-9).then(
+            pl.col("close")
+        ).otherwise(1e-9)
+        adj_open = pl.col("open") * adj_factor
+        intraday = pl.col("adj_close").log() - adj_open.log()
+        return panel.with_columns(intraday.alias(self.name))
+
+
+@register
+class AmihudIlliquidity20(Feature):
+    """20-day rolling Amihud illiquidity: `mean(|return_1d| / dollar_volume)`.
+
+    Amihud (2002, J. Financial Markets) — the standard price-impact-per-
+    dollar-traded measure. Distinct from `log_dollar_volume` (which captures
+    the LEVEL of liquidity); Amihud captures the SENSITIVITY of price to
+    volume — i.e., how much price moves per unit of trading. Less-liquid
+    names show larger price moves per dollar traded, so Amihud is higher.
+
+    Why it matters at 5-day horizon: cross-sectional reversal is documented
+    to be STRONGER in less-liquid names (Avramov-Chordia-Goyal 2006), so
+    Amihud is both a control (size proxy) and a useful interaction term
+    for tree models — `reversal x illiquidity` is one of the canonical
+    documented patterns. The 20-day window matches the standard literature
+    convention; magnitude is small (1e-10 scale before normalization) but
+    rank-IC and z-score are scale-invariant.
+    """
+
+    name = "amihud_illiquidity_20"
+    inputs = ("adj_close", "close", "volume")
+    lookback_days = 21  # 1 for return diff + 20 for rolling mean
+
+    def compute(self, panel: pl.DataFrame) -> pl.DataFrame:
+        c = pl.col("adj_close")
+        daily_ret = (c.log() - c.log().shift(1)).over("ticker")
+        abs_ret = daily_ret.abs()
+        # Dollar volume uses raw close — split-invariant by construction
+        # (price halves, shares double, product preserved).
+        dollar = pl.col("close") * pl.col("volume").cast(pl.Float64)
+        safe_dollar = pl.when(dollar > 1.0).then(dollar).otherwise(1.0)
+        daily_illiq = abs_ret / safe_dollar
+        panel = panel.with_columns(daily_illiq.alias("_illiq"))
+        out = panel.with_columns(
+            pl.col("_illiq").rolling_mean(window_size=20).over("ticker").alias(self.name)
+        )
+        return out.drop("_illiq")

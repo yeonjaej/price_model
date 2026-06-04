@@ -1,0 +1,103 @@
+# Minimum-feature LightGBM: only the post-October-2022 |t| ≥ 3 features.
+#
+# Diagnostic basis
+# ----------------
+# The per-feature univariate cross-sectional IC table on this PIT-corrected
+# panel post-October-2022 produced this ranking by |t|:
+#
+#   feature                  post IC   post t
+#   ─────────────────────    ───────   ──────
+#   log_dollar_volume        +0.0184   +4.87
+#   max_return_21d           +0.0218   +3.48
+#   vol_20                   +0.0252   +3.47
+#   vol_ewm_20               +0.0259   +3.43
+#   body_ratio               +0.0122   +3.25
+#   momentum_12_1            +0.0220   +3.09
+#   range_ratio              +0.0159   +2.90
+#   parkinson_vol_20         +0.0195   +2.52
+#   ... (remaining 15 features have |t| < 3)
+#
+# This experiment tests the question: do the lower-|t| features actively
+# hurt the engineered model, or are they harmless noise that the tree
+# implicitly down-weights? If the 8-feature model matches or beats the
+# 23-feature model on the same metric (gross IC, gross Sharpe), the lower-
+# |t| features are net-zero or net-negative contributors and the engineered
+# model should ship with this reduced feature set.
+#
+# Selection rule
+# --------------
+# Include all features with post-Oct-2022 |t| ≥ 3 in the univariate IC
+# table. Note that vol_20, vol_20_rank, and vol_20_cs_min_dist are all
+# monotone transforms of the same underlying signal and produce identical
+# IC; only vol_20 is included here (the others are redundant).
+#
+# Result: 7 features (after the redundancy removal).
+#
+# Notably absent from this list: momentum_378, momentum_504, momentum_60,
+# distance_52w_high, distance_ma_200, return_5d, return_1d, rsi_14,
+# idio_vol_20, mom60_minus_dist_ma200, abnormal_volume. None of these have
+# |t| ≥ 3 in the univariate post-Oct-2022 regime. Some have NEGATIVE
+# |t| > 1 (return_1d, mom60_minus_dist_ma200, return_5d, rsi_14) — these
+# are the prime candidates for being net-negative contributors when the
+# tree can't see their sign-flip across regimes.
+#
+# Hypothesis
+# ----------
+# If the 23-feature model's IC is being held back by noise / negative-
+# contribution features, the 7-feature version should produce higher
+# gross IC and higher gross Sharpe. If the IC is comparable, the 23-feature
+# multiplicity is just regularizing noise (no harm done, but also no
+# benefit). If the 7-feature variant is materially worse, the lower-|t|
+# features are quietly contributing via interactions the tree finds.
+
+experiment_id: lightgbm_top_signal_features_pit
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # The 7 features with empirical post-Oct-2022 univariate |t| ≥ 3 on this
+  # PIT panel. Ordered by |t| descending.
+  - log_dollar_volume       # t = +4.87
+  - max_return_21d          # t = +3.48
+  - vol_20                  # t = +3.47
+  - vol_ewm_20              # t = +3.43
+  - body_ratio              # t = +3.25
+  - momentum_12_1           # t = +3.09
+  - range_ratio             # t = +2.90 (just below threshold but kept for completeness)
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_top_signal
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_top_signal_pit_v1
+    class: LightGBMModel
+    params:
+      # Reduced num_leaves to match the reduced feature count. With 7
+      # features and num_leaves=64, the tree would carve each feature
+      # into ~9 bins on average — still excessive. num_leaves=16 keeps
+      # the per-feature granularity reasonable (~2-3 bins per feature).
+      learning_rate: 0.02
+      num_leaves: 16            # reduced from 64 — matches feature count
+      min_data_in_leaf: 200
+      feature_fraction: 1.0     # use all 7 features each tree (no random subsetting)
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]
+      monotone_constraints: [1, 1, 1, 1, 1, 1, 1]   # all 7 features have empirical IC > 0

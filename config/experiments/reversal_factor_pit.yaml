@@ -1,0 +1,98 @@
+# Short-term reversal: the literature-canonical single-factor baseline for
+# DAILY cross-sectional return prediction.
+#
+# Methodological reference
+# ------------------------
+# Lehmann (1990, QJE) "Fads, Martingales, and Market Efficiency" and
+# Jegadeesh (1990, JoF) "Evidence of Predictable Behavior of Security
+# Returns" together establish that at daily-to-weekly horizons, the
+# dominant cross-sectional anomaly on US equities is SHORT-TERM REVERSAL:
+# stocks with high recent returns underperform stocks with low recent
+# returns. Mechanism is some mix of microstructure (bid-ask bounce),
+# liquidity provision (Avramov-Chordia-Goyal 2006), and behavioral
+# overreaction.
+#
+# Critically, this is the canonical baseline for THIS project's horizon
+# (5-day forward returns). The Jegadeesh-Titman (1993) 12-month momentum
+# anomaly is the canonical for MONTHLY rebalance; at daily horizons, JT
+# is not the right Tier-1 reference. The project's prior treatment of
+# `mom_12_1_factor` as "the canonical baseline" was using the monthly
+# convention at a daily horizon — a mismatch that this experiment
+# corrects.
+#
+# What this experiment tests
+# --------------------------
+# Two reversal-direction factors against the project's 5-day-forward
+# target, both with cross-sectionally rank-normalized predictions:
+#
+#   reversal_1d   = MomentumFactor(return_1d, sign=-1)
+#                   Ranks tickers by the NEGATIVE of yesterday's log
+#                   return. The pure Lehmann-1990 implementation.
+#
+#   reversal_5d   = MomentumFactor(return_5d, sign=-1)
+#                   Ranks by the NEGATIVE of the past 5-day log return.
+#                   Horizon-matched to the project's target (predicting
+#                   5-day forward return given 5-day trailing return,
+#                   negative-correlation hypothesis).
+#
+# Hypotheses
+# ----------
+# H_lehmann: the Lehmann-canonical reversal_1d factor produces
+#   statistically-significant POSITIVE IC on this PIT universe at 5-day
+#   horizon. Magnitude expected to be modest (IC +0.005 to +0.015) — the
+#   short-term reversal effect on liquid US large-caps is well-documented
+#   but has decayed substantially since the 1990s (McLean-Pontiff 2016).
+#
+# H_horizon_matched: reversal_5d (sign-flipped 5-day trailing return)
+#   carries comparable or slightly weaker IC than reversal_1d. The
+#   1-day version captures the microstructure-driven component most
+#   directly; the 5-day version aggregates it with mild medium-horizon
+#   continuation that partially cancels.
+#
+# H_tier1_floor: the project's existing model results (LightGBM, ARIMA,
+#   Lasso, etc.) should be benchmarked against THESE reversal factors as
+#   the Tier-1 canonical baseline. The "model beats canonical anomaly"
+#   claim requires beating reversal_1d / reversal_5d on rank-IC,
+#   ICIR, and net-of-cost Sharpe — not just mom_12_1.
+#
+# Wall-clock: ~30 seconds. No fit step; the predict step just returns
+# sign * feature value. The walk-forward harness iterates through refits
+# to keep the prediction-date grid identical to the other models.
+
+experiment_id: reversal_factor_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - return_1d                     # Lehmann (1990) — 1-day trailing log return
+  - return_5d                     # Horizon-matched — 5-day trailing log return
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252            # annual refit; the model has no parameters,
+                                  # but we keep the same refit cadence as the
+                                  # momentum-factor experiment for slice parity
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: reversal_1d_factor
+    class: MomentumFactor
+    features:
+      - return_1d
+    params:
+      feature_name: return_1d
+      sign: -1                    # Lehmann canonical: high recent return → low future
+
+  - id: reversal_5d_factor
+    class: MomentumFactor
+    features:
+      - return_5d
+    params:
+      feature_name: return_5d
+      sign: -1                    # Horizon-matched reversal

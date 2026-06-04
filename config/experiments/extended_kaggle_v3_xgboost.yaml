@@ -1,0 +1,72 @@
+# XGBoost on the v3_curated 14-feature panel.
+#
+# Sister experiment to extended_kaggle_v3_curated.yaml — identical feature
+# panel, identical walk-forward harness, identical refit cadence, identical
+# universe. Only the model class changes: XGBoost instead of LightGBM.
+#
+# Purpose: produce a decorrelated tree-model prediction stream to add to the
+# stacking ensemble. XGBoost's level-wise tree growth and `hist` split-finding
+# algorithm produce predictions that are typically correlated ~0.7-0.85 with
+# LightGBM's leaf-wise growth — close enough to be measuring the same signal,
+# far enough to add ensemble value via decorrelation.
+#
+# Hyperparameters are Kaggle-reasonable defaults; can be Optuna-swept via
+# scripts/optuna_sweep.py if the standalone IC is meaningfully below v3_curated's.
+
+experiment_id: extended_kaggle_v3_xgboost
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # Same 14 features as extended_kaggle_v3_curated.yaml — single change
+  # is the model class, so the comparison strictly isolates the
+  # XGBoost-vs-LightGBM library effect.
+  - abnormal_volume
+  - distance_52w_high
+  - mom60_minus_dist_ma200
+  - return_5d
+  - max_return_21d
+  - momentum_12_1
+  - rsi_14
+  - log_dollar_volume
+  - vol_ewm_20
+  - momentum_60_rank
+  - cs_return_dispersion_20
+  - sector_relative_return_5d
+  - momentum_504
+  - beta_60
+
+normalize_kind: zscore
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_v3_xgboost_baseline
+    class: ZeroPredictor
+    params: {}
+
+  - id: xgboost_v3_curated
+    class: XGBoostModel
+    params:
+      # Kaggle-reasonable hyperparameters for tabular regression on
+      # cross-sectional data. Close to xgboost.XGBRegressor's defaults
+      # with mild reg for the small-coefficient cross-sectional target.
+      learning_rate: 0.05
+      max_depth: 6
+      min_child_weight: 20
+      subsample: 0.8
+      colsample_bytree: 0.8
+      reg_alpha: 0.1
+      reg_lambda: 5.0
+      n_estimators: 500
+      tree_method: hist
+      val_fraction: 0.10
+      early_stopping_rounds: 50
+      seeds: [42, 2024, 12345]

@@ -83,7 +83,7 @@ fig = px.scatter(
 fig.update_traces(textposition="top center", textfont_size=10)
 fig.add_vline(x=0, line_dash="dot", line_color="gray")
 fig.update_layout(
-    xaxis_title="Consensus = mean predicted 5-day excess return across selected models",
+    xaxis_title="Consensus = mean predicted forward excess return across selected models",
     yaxis_title="Disagreement = stdev of those predictions",
 )
 # Annotate the four quadrants with their interpretation
