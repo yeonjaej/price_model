@@ -1,37 +1,36 @@
 # price-model
 
-A point-in-time (PIT) corrected cross-sectional equity return predictor on the S&P 500, evaluated under strict HP-free held-out protocols across 36 model variants spanning trees, regularized linear, and pure factor approaches at both 5-day and 21-day forward horizons.
+A point-in-time (PIT) corrected cross-sectional equity return predictor on the S&P 500, evaluated under strict HP-free held-out protocols at the 21-day (approximately monthly) forward horizon.
 
 ## Executive summary
 
-Across a 36-model apples-to-apples comparison on the 2025-01-02 → 2026-05-27 out-of-sample slice (350 dates intersection, all hyperparameters and coefficients selected strictly on data preceding this period), the **Han-He-Rapach-Zhou (2024) E-LASSO recipe** — L1-regularized cross-sectional regression on a 9-feature panel of documented academic anomalies — produces the strongest signal in the study. At 21-day forward horizon on 334 dates of OOS data: **IC = +0.0697, t = +5.24, long-short Sharpe = +1.24**. The result holds at 5-day horizon (IC +0.0249, t = +2.72) but the relative advantage widens dramatically at the monthly horizon classical asset-pricing studies use.
+On the 2025-01-02 → 2026-04-27 out-of-sample slice (334 dates, all hyperparameters and coefficients selected strictly on data preceding this period), a **9-feature L1 cross-sectional regression** on documented academic anomalies (per Han-He-Rapach-Zhou 2024) produces the strongest signal in the comparison at 21-day forward horizon: **IC = +0.0697, t = +5.24, long-short Sharpe = +1.24**. The same framework can be applied at 5-day horizon (the L1 regression scores IC = +0.0249, t = +2.72 there); the relative advantage of the linear approach widens dramatically at the monthly horizon classical asset-pricing studies use, so this README leads with the 21-day result.
 
 Headline 21-day comparison on the 2025-01-02 → 2026-04-27 OOS slice (334 dates):
 
-| Tier | Model | HP-selection | Reference | IC | t-stat | L/S Sharpe |
-|---|---|---|---|---|---|---|
-| 1 | **HHRZ E-LASSO** (`lasso_elasso_pit_h21`) | inner CV (α + l1_ratio) | Han-He-Rapach-Zhou 2024, *RFS* | **+0.0697** | **+5.24** | **+1.24** |
-| 2 | `mom_504_factor_h21` (24-month momentum) | none | extension of JT 1993 | +0.0510 | +6.31 | +1.40 |
-| 2 | `mom_756_factor_h21` (36-month momentum) | none | MOP 2012 (TSMOM-adjacent) | +0.0503 | +7.14 | +1.82 |
-| 2 | `mom_378_factor_h21` (18-month momentum) | none | extension of JT 1993 | +0.0423 | +4.96 | +1.35 |
-| 3 | `mom_12_1_factor_h21` (Jegadeesh-Titman canonical) | none | Jegadeesh-Titman 1993 | +0.0312 | +3.51 | +1.04 |
-| 4 | LightGBM v3 curated (default HPs) | none | this work | +0.0278 | +4.35 | +0.75 |
-| 4 | LightGBM v3 curated (Optuna ≤2024 held-out) | held-out Optuna | this work | +0.0191 | +3.02 | +0.75 |
-| 5 | XGBoost v3 (5-day-trained) | default | this work | +0.0032 | +0.51 | +0.17 |
-| 5 | CatBoost v3 (5-day-trained) | default | this work | −0.0062 | −0.89 | −0.19 |
-| — | Pure-momentum Lasso (cautionary tale) | inner CV α | this work | **−0.0185** | **−2.79** | −0.21 |
+| Model | HP-selection | IC | t-stat | L/S Sharpe |
+|---|---|---|---|---|
+| **L1 regression, 9-feature anomaly panel** | inner CV | **+0.0697** | **+5.24** | **+1.24** |
+| 24-month momentum factor | none | +0.0510 | +6.31 | +1.40 |
+| 36-month momentum factor | none | +0.0503 | +7.14 | +1.82 |
+| 18-month momentum factor | none | +0.0423 | +4.96 | +1.35 |
+| JT 12-1 momentum (canonical) | none | +0.0312 | +3.51 | +1.04 |
+| LightGBM, default HPs | none | +0.0278 | +4.35 | +0.75 |
+| Ridge regression, 12-feature panel | inner CV | +0.0250 | +3.08 | +0.76 |
+| LightGBM, held-out Optuna (≤ 2024-12-31) | held-out Optuna | +0.0191 | +3.02 | +0.75 |
+| Pure-momentum Lasso, 4 momentum features | inner CV | **−0.0185** | **−2.79** | −0.21 |
 
-**Deployment-relevant result.** HHRZ E-LASSO produces the strongest gross signal, but `mom_756_factor` produces the strongest *net* signal after transaction costs. Net 20bp Sharpe ranking on the same 21-day OOS slice: `mom_756_factor_h21` **+1.80** (15× annual turnover); `mom_504_factor_h21` +1.39; `mom_378_factor_h21` +1.33; HHRZ E-LASSO **+1.17** (128× turnover); LightGBM v3 h21 default +0.63 (130× turnover); held-out Optuna LightGBM +0.61. The HHRZ → momentum inversion is driven by 8× turnover differential: HHRZ retains 84% of its gross Sharpe at 20bp; mom_756 retains 99%. **On gross signal, multi-anomaly linear dominates; on deployment, the slow-moving single momentum factor dominates.** Both demolish ML on both metrics.
+**Deployment-relevant result.** The L1 regression produces the strongest gross signal, but the 36-month momentum factor produces the strongest *net* signal after transaction costs. Net 20 bp Sharpe ranking on the same 21-day OOS slice: 36-month momentum factor **+1.80** (15× annual turnover); 24-month momentum +1.39; 18-month momentum +1.33; **L1 regression +1.17** (128× turnover); LightGBM (default HPs) +0.63 (130× turnover); LightGBM (held-out Optuna) +0.61. The inversion is driven by an 8× turnover differential: the L1 regression retains 84% of its gross Sharpe at 20 bp; the 36-month momentum factor retains 99%. **On gross signal, the multi-anomaly L1 regression dominates; on deployment, the slow-moving single momentum factor dominates.** Both decisively beat every ML variant on both metrics.
 
-Three structural claims about cross-sectional equity return prediction on liquid US large-caps at 5-day and 21-day forward horizons in the post-2024 regime:
+Three structural claims about cross-sectional equity return prediction on liquid US large-caps at the 21-day forward horizon in the post-2024 regime:
 
-**Claim 1 — Multi-anomaly L1 regression dominates ML.** HHRZ E-LASSO at 21-day produces IC +0.0697 vs the best tree-ensemble variant at +0.0278 — a 150% relative gap. The result holds at 5-day (HHRZ +0.0249 vs best ML +0.0158) but with a smaller margin. Across both horizons, every variant of LightGBM/XGBoost/CatBoost — including audit-curated feature panels, Optuna-tuned hyperparameters, and 100-trial sweeps — fails to match the linear-on-documented-anomalies recipe. The signal HHRZ extracts is not accessible to gradient-boosted trees on this feature panel.
+**Claim 1 — Multi-anomaly L1 regression dominates ML.** L1 regression at 21-day produces IC +0.0697 vs the best tree-ensemble variant at +0.0278 — a 150% relative gap. Every LightGBM variant tested — including audit-curated feature panels, default hyperparameters, and a 100-trial Optuna sweep — fails to match the linear-on-documented-anomalies result. The signal the L1 model extracts is not accessible to gradient-boosted trees on this feature panel.
 
-**Claim 2 — Hyperparameter optimization is fragile to regime shift.** The headline evidence: at 21-day target horizon, **held-out Optuna (HPs only saw ≤ 2024-12-31) scores IC +0.0191 on 2025+, *lower* than the default-HP baseline at +0.0278.** Aggressive HP optimization underperformed defaults on the OOS slice it never trained on. The 5-day evidence is mixed (Split B with more recent HP-selection data scored higher 2025+ OOS than Split A with deeper cutoff, but Split A's full-sample IC was higher than Split B's — a regime-mismatch signature where "more training data" can simultaneously improve recent-regime fit and worsen older-period generalization). The mechanism (chosen HPs reveal it): Optuna picked qualitatively different HPs at different horizons (`lambda_l1=1.79, lambda_l2=0.20` at 5-day; `lambda_l1=0.10, lambda_l2=44.4` at 21-day — 18× lower L1, 222× higher L2), and both sets failed to generalize cleanly. The HP that minimizes train-set CV error and the HP that maximizes test-set OOS IC are not the same point, and the gap widens with regime divergence — consistent with DeMiguel-Garlappi-Uppal (2009)'s estimation-error-dominates-optimization result, generalized to HP search.
+**Claim 2 — Hyperparameter optimization is fragile to regime shift.** At 21-day target horizon, **held-out Optuna (HPs only saw ≤ 2024-12-31) scores IC +0.0191 on the 2025+ slice, *lower* than the default-HP baseline at +0.0278.** Aggressive HP optimization underperformed defaults on an OOS slice it never trained on. The mechanism is visible in the chosen HPs: Optuna selected `lambda_l1 = 0.10, lambda_l2 = 44.4` at 21-day (dense + high L2 — a regime that fits training-period structure but does not generalize). The HP that minimizes train-set CV error and the HP that maximizes test-set OOS IC are not the same point, and the gap widens with regime divergence — consistent with DeMiguel-Garlappi-Uppal (2009)'s estimation-error-dominates-optimization result, generalized to HP search.
 
-**Claim 3 — Linear regularization on collinear panels can produce significantly negative IC.** Pure-momentum Lasso on {mom_12_1, mom_378, mom_504, mom_756} — features all measuring cross-sectional momentum at different lookback windows, pairwise correlations 0.6-0.8 — produces IC −0.019, t = −3.01 on both 5-day and 21-day horizons. The Lasso/ElasticNet outputs are virtually identical (IC differ by 0.00005), meaning CV picked l1_ratio = 1.0 — L2 stabilization did not help. The HHRZ recipe works because the 9 anomalies span economically distinct mechanisms (momentum, volatility, MAX effect, 52w-high, liquidity, beta) with low pairwise correlations; pure-momentum-Lasso fails because L1 cannot cleanly select among collinear siblings. **The feature panel matters more than the regularization method.**
+**Claim 3 — Linear regularization on collinear panels can produce significantly negative IC.** Pure-momentum Lasso on {12-1, 18-month, 24-month, 36-month} momentum features — pairwise correlations 0.6-0.8 — produces IC −0.019, t = −3.01 at 21-day horizon. Lasso and ElasticNet outputs are virtually identical (IC differ by 0.00005), meaning CV picked l1_ratio = 1.0 — L2 stabilization did not help. The 9-feature anomaly panel works because its features span economically distinct mechanisms (momentum, volatility, MAX effect, 52w-high, liquidity, beta) with low pairwise correlations; the pure-momentum panel fails because L1 cannot cleanly select among collinear siblings. **The feature panel matters more than the regularization method.**
 
-The above claims are supported by a 36-model apples-to-apples comparison; every number is reproducible from the YAML configs in `config/experiments/` and the comparison scripts in `scripts/`. All headline models in the 21-day table are HP-selected on data strictly preceding the 2025-01-02 evaluation start. The [methodology appendix](#methodology-appendix) documents the held-out Optuna protocol, the deflated-Sharpe correction (Bailey & López de Prado 2014), the regime indicator (`cs_return_dispersion_20`), the audit-driven LightGBM panel curation, and the pure-momentum-Lasso cancellation diagnostic.
+Every number is reproducible from the YAML configs in `config/experiments/` and the comparison scripts in `scripts/`. All headline models in the table above are HP-selected on data strictly preceding the 2025-01-02 evaluation start. The [methodology appendix](#methodology-appendix) documents the held-out Optuna protocol, the deflated-Sharpe correction (Bailey & López de Prado 2014), the regime indicator (`cs_return_dispersion_20`), the audit-driven LightGBM panel curation, and the pure-momentum-Lasso cancellation diagnostic.
 
 The result is **statistically rigorous, regime-conditional, and not deployable for retail investors** after bid-ask spreads, commissions, and capital-gains taxes. The numbers above are bounded by free-data quality and methodological choices that are enumerated explicitly — see [Data quality and methodological limitations](#data-quality-and-methodological-limitations) and [Scope and limitations](#scope-and-limitations).
 
@@ -76,7 +75,7 @@ The result is **statistically rigorous, regime-conditional, and not deployable f
   So the per-date IC on this hypothetical date is **+0.90**. Perfect
   ranking would give +1.0; perfect mis-ranking would give −1.0;
   independent ranking would give roughly 0. The reported headline
-  HHRZ E-LASSO 21-day IC of +0.0697 is therefore the **average over 334
+  headline L1 regression 21-day IC of +0.0697 is therefore the **average over 334
   such daily correlations** across the 2025-01-02 → 2026-04-27 OOS slice,
   each computed across ~450 tickers. A per-date IC of +0.07 on average is
   small in absolute terms but large in t-stat (+5.24) due to the
@@ -137,112 +136,86 @@ The result is **statistically rigorous, regime-conditional, and not deployable f
   walk-forward ensemble. Implemented as the `cs_return_dispersion_20`
   feature in `src/price_model/features/cross_features.py`.
 
-## Primary result: HHRZ E-LASSO at 21-day horizon and three claims
+## Primary result: 9-feature L1 regression at 21-day horizon and three claims
 
-The primary out-of-sample estimate is **IC = +0.0697 (t = +5.24, Sharpe = +1.24) on the PIT-corrected universe at 21-day forward horizon, evaluated on the 2025-01-02 → 2026-04-27 OOS slice (334 dates)**. The model is `lasso_elasso_pit_h21`: a 9-feature documented-anomaly panel fit with L1-regularized linear regression, α selected by 5-fold inner CV on training data only. The recipe is Han-He-Rapach-Zhou (2024)'s "E-LASSO" applied to a sp500_pit panel with one feature per economically distinct anomaly family.
+The primary out-of-sample estimate is **IC = +0.0697 (t = +5.24, long-short Sharpe = +1.24) on the PIT-corrected universe at 21-day forward horizon, evaluated on the 2025-01-02 → 2026-04-27 OOS slice (334 dates)**. The model is a 9-feature L1 (Lasso) cross-sectional regression on documented academic anomalies, α selected by 5-fold inner CV on training data only — the recipe of Han-He-Rapach-Zhou (2024), applied to the project's sp500_pit panel with one feature per economically distinct anomaly family. The same recipe at 5-day target horizon scores IC = +0.0249 (t = +2.72) on the same eval slice; the 21-day result is reported as the headline because the linear-on-anomalies advantage is much sharper at the monthly horizon.
 
 The structure of the rest of this section: three subsections, one per claim. Each pairs a comparison table with the supporting empirical evidence.
 
 ### Claim 1 — Multi-anomaly L1 regression dominates ML
 
-The 21-day apples-to-apples comparison ranks **HHRZ E-LASSO above every tested ML variant**, including:
-- LightGBM with default HPs (untuned)
-- LightGBM with held-out-Optuna HPs (≤ 2024-12-31, the methodologically-strictest tuned version)
-- LightGBM with HP-leaked Optuna (HPs saw all data)
-- LightGBM at 5-day target, evaluated at 21-day horizon
-- XGBoost and CatBoost on the same audit-curated v3 feature panel
+The 21-day apples-to-apples comparison ranks **the L1 regression above every tested ML variant**:
 
-| Model class | Best-in-class model_id | 21-day OOS IC | t-stat | Δ vs HHRZ |
-|---|---|---|---|---|
-| **Multi-anomaly L1** | `lasso_elasso_pit_h21` | **+0.0697** | **+5.24** | — |
-| Single momentum factor | `mom_504_factor_h21` | +0.0510 | +6.31 | −0.019 |
-| Tree ensemble (default HPs) | `lightgbm_kaggle_v3_curated_h21` | +0.0278 | +4.35 | −0.042 |
-| Tree ensemble (held-out Optuna) | `lightgbm_kaggle_v3_curated_h21_hp_pre20241231` | +0.0191 | +3.02 | −0.051 |
-| Cross-sectional Ridge (12-feat) | `ridge_pit_v1` | +0.0250 | +3.08 | −0.045 |
-| Cross-sectional Lasso (5-feat) | `lasso_pit_v2` | +0.0121 | +1.90 | −0.058 |
+| Model | 21-day OOS IC | t-stat | Δ vs L1 regression |
+|---|---|---|---|
+| **L1 regression, 9-feature anomaly panel** | **+0.0697** | **+5.24** | — |
+| 24-month momentum factor | +0.0510 | +6.31 | −0.019 |
+| 36-month momentum factor | +0.0503 | +7.14 | −0.019 |
+| Ridge regression, 12-feature panel | +0.0250 | +3.08 | −0.045 |
+| LightGBM, default HPs | +0.0278 | +4.35 | −0.042 |
+| LightGBM, held-out Optuna (≤ 2024-12-31) | +0.0191 | +3.02 | −0.051 |
 
-The relative ranking holds at 5-day horizon (HHRZ E-LASSO +0.0249 vs best ML +0.0158) but the absolute gap is smaller because every model's IC is lower at 5-day. The 21-day horizon makes the linear-on-anomalies advantage stark.
+The same ranking holds at 5-day horizon (L1 regression +0.0249 vs best ML +0.0158) but the absolute gap is smaller because every model's IC is lower at 5-day. The 21-day horizon makes the linear-on-anomalies advantage stark.
 
-Why HHRZ works where ML fails: the 9-feature documented-anomaly panel spans **economically distinct mechanisms** (momentum, low-volatility, idiosyncratic volatility, MAX effect, 52-week-high anchoring, liquidity, market beta), with pairwise correlations typically below 0.3. L1 regularization can cleanly select among them, retaining 4-6 features per refit. The information cross-section ML extracts via tree splits on the same universe is — empirically — a strict subset of what HHRZ-style linear-on-curated-anomalies extracts.
+Why the L1 regression works where ML fails: the 9-feature documented-anomaly panel spans **economically distinct mechanisms** (momentum, low-volatility, idiosyncratic volatility, MAX effect, 52-week-high anchoring, liquidity, market beta), with pairwise correlations typically below 0.3. L1 regularization can cleanly select among them, retaining 4–6 features per refit. The cross-sectional information ML extracts via tree splits on the same universe is — empirically — a strict subset of what the L1-on-curated-anomalies recipe extracts.
 
 #### Net-of-cost refinement: gross-vs-net ranking inversion
 
-The gross-IC ranking favors HHRZ; the net-Sharpe ranking favors long-horizon momentum factors. Net-of-cost decomposition at 3, 10, and 20 bp per side on the same 21-day OOS slice:
+The gross-IC ranking favors the L1 regression; the net-Sharpe ranking favors long-horizon momentum factors. Net-of-cost decomposition at 3, 10, and 20 bp per side on the same 21-day OOS slice:
 
 | Model | Gross IC | Gross Sharpe | Annual turnover | Net @ 3bp | Net @ 10bp | Net @ 20bp |
 |---|---|---|---|---|---|---|
-| **mom_756_factor_h21** | +0.0503 | +1.82 | **15×** | +1.81 | +1.81 | **+1.80** |
-| `mom_504_factor_h21` | +0.0510 | +1.40 | 16× | +1.40 | +1.39 | +1.39 |
-| `mom_378_factor_h21` | +0.0423 | +1.35 | 21× | +1.35 | +1.34 | +1.33 |
-| `mom_504_factor` (5d-trained, 21d eval) | +0.0473 | +1.31 | 5.7× | +1.31 | +1.30 | +1.30 |
-| **HHRZ E-LASSO `lasso_elasso_pit_h21`** | **+0.0697** | +1.24 | 128× | +1.23 | +1.21 | **+1.17** |
-| `mom_12_1_factor_h21` | +0.0312 | +1.04 | 25× | +1.04 | +1.03 | +1.02 |
-| LightGBM v3 h21 (default HPs) | +0.0278 | +0.75 | 130× | +0.74 | +0.69 | +0.63 |
-| LightGBM v3 h21 (held-out Optuna) | +0.0191 | +0.75 | 147× | +0.73 | +0.68 | +0.61 |
-| HHRZ E-LASSO 5-day `lasso_elasso_pit_v1` | +0.0357 | +0.87 | 281× | +0.84 | +0.78 | +0.69 |
+| **36-month momentum factor** | +0.0503 | +1.82 | **15×** | +1.81 | +1.81 | **+1.80** |
+| 24-month momentum factor | +0.0510 | +1.40 | 16× | +1.40 | +1.39 | +1.39 |
+| 18-month momentum factor | +0.0423 | +1.35 | 21× | +1.35 | +1.34 | +1.33 |
+| **L1 regression, 9-feature anomaly panel** | **+0.0697** | +1.24 | 128× | +1.23 | +1.21 | **+1.17** |
+| JT 12-1 momentum (canonical) | +0.0312 | +1.04 | 25× | +1.04 | +1.03 | +1.02 |
+| LightGBM, default HPs | +0.0278 | +0.75 | 130× | +0.74 | +0.69 | +0.63 |
+| LightGBM, held-out Optuna | +0.0191 | +0.75 | 147× | +0.73 | +0.68 | +0.61 |
 
 Two observations:
 
-1. **HHRZ retains 94% of its gross Sharpe at 20bp** (+1.24 → +1.17). mom_756 retains 99% (+1.82 → +1.80). The difference (5 percentage points) is small in relative terms but matters at the deployment margin: in this regime, mom_756 ends up with a +0.63 absolute Sharpe lead over HHRZ E-LASSO on net basis, despite HHRZ leading by +0.020 on gross IC.
+1. **The L1 regression retains 94% of its gross Sharpe at 20 bp** (+1.24 → +1.17). The 36-month momentum factor retains 99% (+1.82 → +1.80). The difference (5 percentage points) is small in relative terms but matters at the deployment margin: the momentum factor ends up with a +0.63 absolute Sharpe lead over the L1 regression on net basis, despite trailing it by +0.020 on gross IC.
 
-2. **ML keeps losing on net.** The best ML variant (LightGBM v3 h21 default) drops from +0.75 gross to +0.63 at 20bp. Held-out Optuna LightGBM drops to +0.61. Both are below every momentum-factor-h21 variant on net Sharpe by 0.4+ Sharpe units. The ML penalty is compounded by tree ensembles' higher turnover relative to their gross signal strength.
+2. **ML keeps losing on net.** The best ML variant (LightGBM, default HPs) drops from +0.75 gross to +0.63 at 20 bp. Held-out Optuna LightGBM drops to +0.61. Both are below every long-horizon momentum factor on net Sharpe by 0.4+ Sharpe units. The ML penalty is compounded by tree ensembles' higher turnover relative to their gross signal strength.
 
-The net-of-cost story does not change which model classes win or lose; it just inverts the within-winner ranking between HHRZ and mom_756. The headline finding remains "linear-on-documented-features beats tree ensembles," with mom_756 (one feature) and HHRZ (nine features) representing two valid points on that spectrum.
+The net-of-cost story does not change which model classes win or lose; it just inverts the within-winner ranking between the L1 regression and the 36-month momentum factor. The headline finding remains "linear-on-documented-features beats tree ensembles," with the momentum factor (one feature) and the L1 regression (nine features) representing two valid points on that spectrum.
 
 ### Claim 2 — Hyperparameter optimization is fragile to regime shift
 
-Three Optuna sweeps on the v3-curated panel, evaluated on the *same* 2025+ OOS slice, demonstrate that aggressive HP optimization does not reliably improve OOS performance — and at 21-day, actively hurts it relative to default HPs.
-
-The headline 21-day comparison, all evaluated on 2025-01-02 → 2026-04-27 (334 dates):
+The headline 21-day comparison, evaluated on 2025-01-02 → 2026-04-27 (334 dates):
 
 | Sweep | HP-selection cutoff | 2025+ OOS IC | t-stat |
 |---|---|---|---|
-| Default HPs (no tuning) | — | **+0.0278** | +4.35 |
-| Held-out Optuna | ≤ 2024-12-31 | **+0.0191** | +3.02 |
+| LightGBM, default HPs (no tuning) | — | **+0.0278** | +4.35 |
+| LightGBM, held-out Optuna | ≤ 2024-12-31 | **+0.0191** | +3.02 |
 
-At 21-day horizon, default HPs beat held-out Optuna by 0.009 IC. The Optuna sweep — even with the eval slice strictly excluded from HP selection — picked HPs (high L2 of 44.4, high learning rate 0.097, fewer trees) optimized for the 2017-2024 training regime that did not generalize to 2025+.
-
-The 5-day evidence, by contrast, is **mixed** — which is itself informative:
-
-| Sweep | HP-selection cutoff | 5-day full-sample IC | 5-day 2025+ OOS IC |
-|---|---|---|---|
-| Default HPs (no tuning) | — | (n/a) | +0.0023 |
-| Original (HP-leaked) | none — HPs saw all data | +0.0184 | +0.0046 |
-| Split A (HP-free) | ≤ 2023-12-31 | +0.0149 | +0.0015 |
-| Split B (HP-free) | ≤ 2024-12-31 | +0.0102 | +0.0080 |
-
-Observations:
-
-1. **HP-leakage inflates full-sample IC by ~19%.** Comparing the HP-leaked +0.0184 to Split A's +0.0149 measures the leakage: the deeper-cutoff held-out version produces lower full-sample IC, with the gap representing how much the unconstrained Optuna overfit to data it shouldn't have seen.
-2. **Recency of HP-selection data matters for 2025+ OOS performance.** Split B (HPs saw through 2024) scores +0.0080 on 2025+; Split A (HPs saw only through 2023) scores +0.0015. More recent training data lets Optuna find HPs better calibrated to the imminent regime.
-3. **But Split B's full-sample IC is lower than Split A's** (+0.0102 vs +0.0149). The HPs Optuna chose with 2024 in training fit that year well but generalized worse to the 2017-2023 portion. So "more training data" simultaneously *improves* 2025+ OOS performance and *worsens* pre-2024 in-sample fit — a regime-mismatch signature, not a stationary distribution.
-
-The chosen hyperparameters reveal the mechanism. 5-day Split A picked `lambda_l1=1.79, lambda_l2=0.20` (sparse + low L2); 21-day held-out picked `lambda_l1=0.10, lambda_l2=44.4` (dense + high L2 — 18× lower L1, 222× higher L2). Optuna found qualitatively different HPs for different horizons, and both differ from defaults. The HP that minimizes train-set CV error and the HP that maximizes 2025+ OOS IC are not the same point — the gap is widest when the training and deployment regimes diverge most.
+At 21-day horizon, default HPs beat held-out Optuna by 0.009 IC. The Optuna sweep — even with the eval slice strictly excluded from HP selection — picked HPs (`lambda_l1 = 0.10, lambda_l2 = 44.4`, `learning_rate = 0.097`, 519 trees) optimized for the 2017–2024 training regime that did not generalize to 2025+.
 
 This is consistent with DeMiguel-Garlappi-Uppal (2009)'s portfolio-optimization result generalized to HP optimization: estimation error in optimal parameters can overwhelm the theoretical benefit of optimization. The practical implication for cross-sectional equity ML: an Optuna-tuned model should not be deployed without first verifying its OOS IC exceeds the default-HP baseline. In this study, that verification step would have rejected the 21-day Optuna result entirely.
 
+The same Optuna protocol was also run at 5-day target horizon under three cutoffs (no cutoff, ≤ 2023-12-31, ≤ 2024-12-31). The full-sample IC drops monotonically with cutoff tightness — quantifying ~19% selection-bias inflation in the no-cutoff version — but the OOS-on-2025+ ranking is mixed because of regime non-stationarity. The 5-day sweep details are in the methodology appendix; they support Claim 2 but don't constitute a cleaner test than the 21-day result reported above.
+
 ### Claim 3 — Linear regularization on collinear panels can produce significantly negative IC
 
-A failure-mode experiment: fit Lasso and ElasticNet on **only the four momentum factors** {momentum_12_1, momentum_378, momentum_504, momentum_756}. Pairwise correlations within the panel range 0.48 to 0.82.
+A failure-mode experiment: fit Lasso and ElasticNet on **only the four momentum factors** (12-1, 18-month, 24-month, 36-month). Pairwise correlations within the panel range 0.48 to 0.82.
 
-| Model | Eval slice | IC | t-stat | L/S Sharpe |
-|---|---|---|---|---|
-| `momentum_lasso_pit_v1` (5-day) | 2025+ (349 dates) | **−0.0190** | **−3.01** | −0.05 |
-| `momentum_elasticnet_pit_v1` (5-day) | 2025+ (349 dates) | −0.0190 | −3.01 | −0.06 |
-| `momentum_lasso_pit_h21` (21-day) | 2025+ (334 dates) | **−0.0185** | **−2.79** | −0.21 |
-| `momentum_elasticnet_pit_h21` (21-day) | 2025+ (334 dates) | −0.0185 | −2.79 | −0.21 |
+| Model | IC | t-stat | L/S Sharpe |
+|---|---|---|---|
+| Pure-momentum Lasso, 21-day | **−0.0185** | **−2.79** | −0.21 |
+| Pure-momentum ElasticNet, 21-day | −0.0185 | −2.79 | −0.21 |
 
-The four results are **statistically significant negative IC** at t < −2.7 on both horizons. ElasticNet's CV consistently picked l1_ratio ≈ 1.0 (pure Lasso); L2 stabilization did not help. The Lasso and ElasticNet predictions differ by IC 0.00005 — essentially identical.
+The results are **statistically significant negative IC** at t < −2.7. ElasticNet's CV consistently picked l1_ratio ≈ 1.0 (pure Lasso); L2 stabilization did not help. Lasso and ElasticNet predictions differ by IC 0.00005 — essentially identical.
 
-The mechanism is the canonical L1 cancellation pathology on collinear regressors. With four features all measuring "stocks that went up over multiple years," Lasso's soft-thresholding cannot cleanly select among them. The chosen coefficients flip signs erratically across walk-forward refits, producing predictions that are anti-correlated with realized returns out of sample. The same recipe with diverse features (HHRZ's 9 economically-distinct anomalies) produces the strongest signal in the study; on a collinear-only panel it produces the strongest *negative* signal.
+The mechanism is the canonical L1 cancellation pathology on collinear regressors. With four features all measuring "stocks that went up over multiple years," Lasso's soft-thresholding cannot cleanly select among them. The chosen coefficients flip signs erratically across walk-forward refits, producing predictions that are anti-correlated with realized returns out of sample. The same recipe with diverse features (the 9 economically-distinct anomalies from Claim 1) produces the strongest signal in the comparison; on a collinear-only panel it produces statistically significant *negative* IC.
 
 The diagnostic in `scripts/inspect_momentum_lasso_coefficients.py` confirms the cancellation pattern empirically.
 
-This claim has a positive corollary: **L1 regularization is not a free lunch on factor zoos.** The HHRZ paper's key contribution is not "use Lasso on more features" but rather "curate the feature panel to one-per-economic-family before applying L1." This project's results confirm that empirically — the curated 9-feature panel produces strong positive IC; the same regularization on a single-family panel produces statistically-significant negative IC.
+This claim has a positive corollary: **L1 regularization is not a free lunch on factor zoos.** The Han-He-Rapach-Zhou (2024) paper's key contribution is not "use Lasso on more features" but rather "curate the feature panel to one-per-economic-family before applying L1." This project's results confirm that empirically — the curated 9-feature panel produces strong positive IC; the same regularization on a single-family panel produces statistically-significant negative IC.
 
 ### Legacy: v2 LightGBM survivorship-bias quantification
 
-The original primary estimate of the project (before the HHRZ comparison was introduced) was the v2 LightGBM at 22 features. The 2×3 ablation matrix below remains valid as a survivorship-bias quantification on that panel — the more important finding from that analysis was *how much* IC the PIT correction removed, not the absolute IC magnitude. The headline result has since shifted to HHRZ E-LASSO, but the PIT mechanics defined here apply to every model in the project.
+The original primary estimate of the project (before the L1-regression comparison was introduced) was the v2 LightGBM at 22 features. The 2×3 ablation matrix below remains valid as a survivorship-bias quantification on that panel — the more important finding from that analysis was *how much* IC the PIT correction removed, not the absolute IC magnitude. The headline result has since shifted to the 9-feature L1 regression, but the PIT mechanics defined here apply to every model in the project.
 
 #### What "PIT correction" means in this project
 
@@ -356,7 +329,7 @@ python -m price_model.cli refresh-data --universe sp500_pit --start 2017-01-01
 The 21-day apples-to-apples comparison requires four trained models. Each run takes 1-15 minutes depending on model class (momentum factors are essentially instant; LightGBM is the slowest).
 
 ```bash
-# HHRZ E-LASSO at 21-day (the headline)
+# 9-feature L1 regression at 21-day (the headline)
 python -m price_model.cli run -e lasso_elasso_pit_h21
 
 # Long-horizon momentum factors at 21-day (the runner-up)
@@ -374,7 +347,7 @@ python -m price_model.cli run -e extended_kaggle_v3_curated_h21_hp_pre20241231
 For the 5-day-horizon companion table, swap the `_h21` suffixes off:
 
 ```bash
-python -m price_model.cli run -e lasso_elasso_pit            # HHRZ E-LASSO 5-day
+python -m price_model.cli run -e lasso_elasso_pit            # 9-feature L1 regression, 5-day
 python -m price_model.cli run -e momentum_factor_pit         # momentum factors 5-day
 python -m price_model.cli run -e extended_kaggle_v3_curated  # LightGBM 5-day (default HPs)
 ```
@@ -417,9 +390,9 @@ The expected numbers in the comparison tables are deterministic for a fixed data
 
 ## Methodology appendix
 
-### The HHRZ E-LASSO 9-feature panel
+### The 9-feature L1 regression anomaly panel
 
-The headline result comes from `lasso_elasso_pit_h21`, which applies L1-regularized cross-sectional regression to a panel curated according to the Han-He-Rapach-Zhou (2024) "E-LASSO" recipe: one feature per economically distinct anomaly family, documented academic attribution required, rank-normalized within each date. The panel:
+The headline result comes from `lasso_elasso_pit_h21`, which applies L1-regularized cross-sectional regression (Lasso) to a 9-feature anomaly panel. The panel-curation principle — one feature per economically distinct anomaly family, documented academic attribution required, rank-normalized within each date — follows Han-He-Rapach-Zhou (2024). The panel:
 
 | # | Feature | Anomaly family | Reference |
 |---|---|---|---|
@@ -474,7 +447,7 @@ Predictions for date `t` use weights trained on data through `t − embargo`. Lo
 
 `scripts/deflated_sharpe_audit.py` applies the deflated Sharpe ratio (Bailey & López de Prado 2014) across all project models. The correction inflates the effective number of trials by the project's experiment count and accounts for skew and kurtosis of the return distribution to compute `P(true_Sharpe > 0 | observed)`. Threshold for "significant after multi-test correction" is DSR > 0.95.
 
-The deflated-Sharpe pass list for the 21-day comparison aligns with the t-stat ranking — the high-t-stat HHRZ and momentum factors clear DSR > 0.99; the LightGBM held-out tuned at t=+3.02 clears DSR > 0.95; XGBoost/CatBoost at low t-stat do not clear.
+The deflated-Sharpe pass list for the 21-day comparison aligns with the t-stat ranking — the high-t-stat L1 regression and momentum factors clear DSR > 0.99; the LightGBM held-out tuned at t=+3.02 clears DSR > 0.95; lower-t-stat models (XGBoost, CatBoost) do not clear.
 
 ### The regime indicator (`cs_return_dispersion_20`)
 
@@ -627,8 +600,8 @@ Listed in approximate order of effort:
 
 ## Scope and limitations
 
-- **Not deployable for retail trading.** After bid-ask spreads, commissions, and capital-gains taxes, even the headline HHRZ E-LASSO at +0.0697 IC and gross Sharpe +1.24 yields an after-cost edge that is meaningful only for institutional cost levels (~3 bp all-in). At retail cost levels (~10-30 bp per side once you include slippage and spread), and on the small portfolio sizes a retail account can hold, the after-cost edge approaches zero. The result is institutional-grade gross, not retail-grade net.
-- **The edge is regime-concentrated.** The 2025-01-02 → 2026-04-27 evaluation window covers a 16-month period characterized by Mag-7 dominance, multi-year momentum persistence, and AI-sector concentration. Long-horizon momentum factors (mom_504, mom_756) and HHRZ E-LASSO both benefit from this regime; their pre-2022 IC was much weaker. The structural ranking (linear-on-anomalies > momentum > ML) has not been verified across regime changes. A bull-to-bear or risk-on-to-risk-off transition could materially compress the HHRZ advantage or reverse the ML-vs-linear ranking.
+- **Not deployable for retail trading.** After bid-ask spreads, commissions, and capital-gains taxes, even the headline L1 regression at +0.0697 IC and gross Sharpe +1.24 yields an after-cost edge that is meaningful only for institutional cost levels (~3 bp all-in). At retail cost levels (~10-30 bp per side once you include slippage and spread), and on the small portfolio sizes a retail account can hold, the after-cost edge approaches zero. The result is institutional-grade gross, not retail-grade net.
+- **The edge is regime-concentrated.** The 2025-01-02 → 2026-04-27 evaluation window covers a 16-month period characterized by Mag-7 dominance, multi-year momentum persistence, and AI-sector concentration. Long-horizon momentum factors and the L1 regression both benefit from this regime; their pre-2022 IC was much weaker. The structural ranking (linear-on-anomalies > momentum > ML) has not been verified across regime changes. A bull-to-bear or risk-on-to-risk-off transition could materially compress the L1-regression advantage or reverse the ML-vs-linear ranking.
 - **Single evaluation period, no multi-window robustness.** All headline numbers are computed on one OOS window (2025+). A multi-window stress test — evaluating the same models on 2018-2020, 2020-2022, 2022-2024, and 2024-2026 in sequence — has not been performed. This is a known limitation that a paid-data version of the analysis would address.
 - **Survivorship-bias is only partially corrected.** The PIT correction excludes ~12% of historical S&P 500 members because yfinance does not return data for delisted symbols (SIVB, FRC, ATVI, AGN, etc.). The reported ICs are floors on the true edge a paid-data version would produce, not estimates of it. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations).
 - **Not a substitute for index funds.** For individual investors, decades of research show that low-cost diversified index funds outperform almost all active strategies after fees and taxes.
@@ -704,7 +677,7 @@ a product of the above collaboration.
 
 ## Citations
 
-- **Han, Y., He, A., Rapach, D., and Zhou, G.** (2024). "Expected Stock Returns and the Cross-Section: An E-LASSO Approach." *Review of Finance*. — The headline E-LASSO recipe (`lasso_elasso_pit_h21`).
+- **Han, Y., He, A., Rapach, D., and Zhou, G.** (2024). "Expected Stock Returns and the Cross-Section: An E-LASSO Approach." *Review of Finance*. — Panel-curation principle (one feature per economic family, rank-normalized, CV-selected α) used in the headline 9-feature L1 regression (`lasso_elasso_pit_h21`).
 - **Jegadeesh, N. and Titman, S.** (1993). "Returns to Buying Winners and Selling Losers." *Journal of Finance* 48(1). — 12-1 momentum anomaly.
 - **Moskowitz, T., Ooi, Y. H., and Pedersen, L. H.** (2012). "Time Series Momentum." *Journal of Financial Economics* 104(2). — Long-horizon (TSMOM) momentum.
 - **Lehmann, B.** (1990). "Fads, Martingales, and Market Efficiency." *Quarterly Journal of Economics* 105(1). — 1-day reversal.
