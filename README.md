@@ -4,35 +4,30 @@ A point-in-time (PIT) corrected cross-sectional equity return predictor on the S
 
 ## Executive summary
 
-On the 2025-01-02 → 2026-04-27 out-of-sample slice (334 dates, all hyperparameters and coefficients selected strictly on data preceding this period), a **9-feature L1 cross-sectional regression** on documented academic anomalies (per Han-He-Rapach-Zhou 2024) produces the strongest signal in the comparison at 21-day forward horizon: **IC = +0.0697, t = +5.24, long-short Sharpe = +1.24**. The same framework can be applied at 5-day horizon (the L1 regression scores IC = +0.0249, t = +2.72 there); the relative advantage of the linear approach widens dramatically at the monthly horizon classical asset-pricing studies use, so this README leads with the 21-day result.
+On the 2025-01-02 → 2026-04-27 out-of-sample slice (334 dates, all hyperparameters and coefficients selected strictly on data preceding this period), a **9-feature L1 cross-sectional regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) produces the strongest signal at the 21-day forward horizon: **IC = +0.0697 (t = +5.24), long-short Sharpe = +1.24**. The same framework applied at 5-day horizon scores IC = +0.0249 (t = +2.72); the README leads with the 21-day result because the linear-on-anomalies advantage is much sharper at the monthly horizon.
 
 Headline 21-day comparison on the 2025-01-02 → 2026-04-27 OOS slice (334 dates):
 
-| Model | HP-selection | IC | t-stat | L/S Sharpe |
-|---|---|---|---|---|
-| **L1 regression, 9-feature anomaly panel** | inner CV | **+0.0697** | **+5.24** | **+1.24** |
-| 24-month momentum factor | none | +0.0510 | +6.31 | +1.40 |
-| 36-month momentum factor | none | +0.0503 | +7.14 | +1.82 |
-| 18-month momentum factor | none | +0.0423 | +4.96 | +1.35 |
-| JT 12-1 momentum (canonical) | none | +0.0312 | +3.51 | +1.04 |
-| LightGBM, default HPs | none | +0.0278 | +4.35 | +0.75 |
-| Ridge regression, 12-feature panel | inner CV | +0.0250 | +3.08 | +0.76 |
-| LightGBM, held-out Optuna (≤ 2024-12-31) | held-out Optuna | +0.0191 | +3.02 | +0.75 |
-| Pure-momentum Lasso, 4 momentum features | inner CV | **−0.0185** | **−2.79** | −0.21 |
+| Model | HP-selection | Gross IC | t-stat | Gross L/S Sharpe | Net 20 bp Sharpe |
+|---|---|---|---|---|---|
+| **L1 regression, 9-feature anomaly panel** | inner CV | **+0.0697** | **+5.24** | **+1.24** | +1.17 |
+| 36-month momentum factor | none | +0.0503 | +7.14 | +1.82 | **+1.80** |
+| 24-month momentum factor | none | +0.0510 | +6.31 | +1.40 | +1.39 |
+| 18-month momentum factor | none | +0.0423 | +4.96 | +1.35 | +1.33 |
+| JT 12-1 momentum (canonical) | none | +0.0312 | +3.51 | +1.04 | +1.02 |
+| Ridge regression, 12-feature panel | inner CV | +0.0250 | +3.08 | +0.76 | +0.66 |
+| LightGBM, default HPs | none | +0.0278 | +4.35 | +0.75 | +0.63 |
+| LightGBM, held-out Optuna (≤ 2024-12-31) | held-out Optuna | +0.0191 | +3.02 | +0.75 | +0.61 |
+| Pure-momentum Lasso, 4 momentum features | inner CV | **−0.0185** | **−2.79** | −0.21 | −0.26 |
 
-**Deployment-relevant result.** The L1 regression produces the strongest gross signal, but the 36-month momentum factor produces the strongest *net* signal after transaction costs. Net 20 bp Sharpe ranking on the same 21-day OOS slice: 36-month momentum factor **+1.80** (15× annual turnover); 24-month momentum +1.39; 18-month momentum +1.33; **L1 regression +1.17** (128× turnover); LightGBM (default HPs) +0.63 (130× turnover); LightGBM (held-out Optuna) +0.61. The inversion is driven by an 8× turnover differential: the L1 regression retains 84% of its gross Sharpe at 20 bp; the 36-month momentum factor retains 99%. **On gross signal, the multi-anomaly L1 regression dominates; on deployment, the slow-moving single momentum factor dominates.** Both decisively beat every ML variant on both metrics.
+Two top-line observations from the table:
 
-Three structural claims about cross-sectional equity return prediction on liquid US large-caps at the 21-day forward horizon in the post-2024 regime:
+- **Gross-IC ranking favors the L1 regression**; net 20 bp Sharpe favors the 36-month momentum factor (+1.80 vs +1.17), driven by an 8× turnover differential.
+- **Every tested ML variant trails both** the L1 regression and the long-horizon momentum factors on both gross IC and net Sharpe.
 
-**Claim 1 — Multi-anomaly L1 regression dominates ML.** L1 regression at 21-day produces IC +0.0697 vs the best tree-ensemble variant at +0.0278 — a 150% relative gap. Every LightGBM variant tested — including audit-curated feature panels, default hyperparameters, and a 100-trial Optuna sweep — fails to match the linear-on-documented-anomalies result. The signal the L1 model extracts is not accessible to gradient-boosted trees on this feature panel.
+For the technical setup (PIT correction, walk-forward training with embargo, inner CV for regularization-strength selection, held-out Optuna, deflated Sharpe), see [Methodology](#methodology). For analysis of why ML fell short, why long-horizon momentum wins net-of-cost, and the regime fragility of hyperparameter optimization, see [Discussion](#discussion).
 
-**Claim 2 — Hyperparameter optimization is fragile to regime shift.** At 21-day target horizon, **held-out Optuna (HPs only saw ≤ 2024-12-31) scores IC +0.0191 on the 2025+ slice, *lower* than the default-HP baseline at +0.0278.** Aggressive HP optimization underperformed defaults on an OOS slice it never trained on. The mechanism is visible in the chosen HPs: Optuna selected `lambda_l1 = 0.10, lambda_l2 = 44.4` at 21-day (dense + high L2 — a regime that fits training-period structure but does not generalize). The HP that minimizes train-set CV error and the HP that maximizes test-set OOS IC are not the same point, and the gap widens with regime divergence — consistent with DeMiguel-Garlappi-Uppal (2009)'s estimation-error-dominates-optimization result, generalized to HP search.
-
-**Claim 3 — Linear regularization on collinear panels can produce significantly negative IC.** Pure-momentum Lasso on {12-1, 18-month, 24-month, 36-month} momentum features — pairwise correlations 0.6-0.8 — produces IC −0.019, t = −3.01 at 21-day horizon. Lasso and ElasticNet outputs are virtually identical (IC differ by 0.00005), meaning CV picked l1_ratio = 1.0 — L2 stabilization did not help. The 9-feature anomaly panel works because its features span economically distinct mechanisms (momentum, volatility, MAX effect, 52w-high, liquidity, beta) with low pairwise correlations; the pure-momentum panel fails because L1 cannot cleanly select among collinear siblings. **The feature panel matters more than the regularization method.**
-
-Every number is reproducible from the YAML configs in `config/experiments/` and the comparison scripts in `scripts/`. All headline models in the table above are HP-selected on data strictly preceding the 2025-01-02 evaluation start. The [methodology appendix](#methodology-appendix) documents the held-out Optuna protocol, the deflated-Sharpe correction (Bailey & López de Prado 2014), the regime indicator (`cs_return_dispersion_20`), the audit-driven LightGBM panel curation, and the pure-momentum-Lasso cancellation diagnostic.
-
-The result is **statistically rigorous, regime-conditional, and not deployable for retail investors** after bid-ask spreads, commissions, and capital-gains taxes. The numbers above are bounded by free-data quality and methodological choices that are enumerated explicitly — see [Data quality and methodological limitations](#data-quality-and-methodological-limitations) and [Scope and limitations](#scope-and-limitations).
+The result is **statistically rigorous, regime-conditional, and not deployable for retail investors** after bid-ask spreads, commissions, and capital-gains taxes. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations) and [Scope and limitations](#scope-and-limitations) for the bounds on what these numbers mean.
 
 ### Metric definitions
 
@@ -136,179 +131,6 @@ The result is **statistically rigorous, regime-conditional, and not deployable f
   walk-forward ensemble. Implemented as the `cs_return_dispersion_20`
   feature in `src/price_model/features/cross_features.py`.
 
-## Primary result: 9-feature L1 regression at 21-day horizon and three claims
-
-The primary out-of-sample estimate is **IC = +0.0697 (t = +5.24, long-short Sharpe = +1.24) on the PIT-corrected universe at 21-day forward horizon, evaluated on the 2025-01-02 → 2026-04-27 OOS slice (334 dates)**. The model is a 9-feature L1 (Lasso) cross-sectional regression on documented academic anomalies, α selected by 5-fold inner CV on training data only — the recipe of Han-He-Rapach-Zhou (2024), applied to the project's sp500_pit panel with one feature per economically distinct anomaly family. The same recipe at 5-day target horizon scores IC = +0.0249 (t = +2.72) on the same eval slice; the 21-day result is reported as the headline because the linear-on-anomalies advantage is much sharper at the monthly horizon.
-
-The structure of the rest of this section: three subsections, one per claim. Each pairs a comparison table with the supporting empirical evidence.
-
-### Claim 1 — Multi-anomaly L1 regression dominates ML
-
-The 21-day apples-to-apples comparison ranks **the L1 regression above every tested ML variant**:
-
-| Model | 21-day OOS IC | t-stat | Δ vs L1 regression |
-|---|---|---|---|
-| **L1 regression, 9-feature anomaly panel** | **+0.0697** | **+5.24** | — |
-| 24-month momentum factor | +0.0510 | +6.31 | −0.019 |
-| 36-month momentum factor | +0.0503 | +7.14 | −0.019 |
-| Ridge regression, 12-feature panel | +0.0250 | +3.08 | −0.045 |
-| LightGBM, default HPs | +0.0278 | +4.35 | −0.042 |
-| LightGBM, held-out Optuna (≤ 2024-12-31) | +0.0191 | +3.02 | −0.051 |
-
-The same ranking holds at 5-day horizon (L1 regression +0.0249 vs best ML +0.0158) but the absolute gap is smaller because every model's IC is lower at 5-day. The 21-day horizon makes the linear-on-anomalies advantage stark.
-
-Why the L1 regression works where ML fails: the 9-feature documented-anomaly panel spans **economically distinct mechanisms** (momentum, low-volatility, idiosyncratic volatility, MAX effect, 52-week-high anchoring, liquidity, market beta), with pairwise correlations typically below 0.3. L1 regularization can cleanly select among them, retaining 4–6 features per refit. The cross-sectional information ML extracts via tree splits on the same universe is — empirically — a strict subset of what the L1-on-curated-anomalies recipe extracts.
-
-#### Net-of-cost refinement: gross-vs-net ranking inversion
-
-The gross-IC ranking favors the L1 regression; the net-Sharpe ranking favors long-horizon momentum factors. Net-of-cost decomposition at 3, 10, and 20 bp per side on the same 21-day OOS slice:
-
-| Model | Gross IC | Gross Sharpe | Annual turnover | Net @ 3bp | Net @ 10bp | Net @ 20bp |
-|---|---|---|---|---|---|---|
-| **36-month momentum factor** | +0.0503 | +1.82 | **15×** | +1.81 | +1.81 | **+1.80** |
-| 24-month momentum factor | +0.0510 | +1.40 | 16× | +1.40 | +1.39 | +1.39 |
-| 18-month momentum factor | +0.0423 | +1.35 | 21× | +1.35 | +1.34 | +1.33 |
-| **L1 regression, 9-feature anomaly panel** | **+0.0697** | +1.24 | 128× | +1.23 | +1.21 | **+1.17** |
-| JT 12-1 momentum (canonical) | +0.0312 | +1.04 | 25× | +1.04 | +1.03 | +1.02 |
-| LightGBM, default HPs | +0.0278 | +0.75 | 130× | +0.74 | +0.69 | +0.63 |
-| LightGBM, held-out Optuna | +0.0191 | +0.75 | 147× | +0.73 | +0.68 | +0.61 |
-
-Two observations:
-
-1. **The L1 regression retains 94% of its gross Sharpe at 20 bp** (+1.24 → +1.17). The 36-month momentum factor retains 99% (+1.82 → +1.80). The difference (5 percentage points) is small in relative terms but matters at the deployment margin: the momentum factor ends up with a +0.63 absolute Sharpe lead over the L1 regression on net basis, despite trailing it by +0.020 on gross IC.
-
-2. **ML keeps losing on net.** The best ML variant (LightGBM, default HPs) drops from +0.75 gross to +0.63 at 20 bp. Held-out Optuna LightGBM drops to +0.61. Both are below every long-horizon momentum factor on net Sharpe by 0.4+ Sharpe units. The ML penalty is compounded by tree ensembles' higher turnover relative to their gross signal strength.
-
-The net-of-cost story does not change which model classes win or lose; it just inverts the within-winner ranking between the L1 regression and the 36-month momentum factor. The headline finding remains "linear-on-documented-features beats tree ensembles," with the momentum factor (one feature) and the L1 regression (nine features) representing two valid points on that spectrum.
-
-### Claim 2 — Hyperparameter optimization is fragile to regime shift
-
-The headline 21-day comparison, evaluated on 2025-01-02 → 2026-04-27 (334 dates):
-
-| Sweep | HP-selection cutoff | 2025+ OOS IC | t-stat |
-|---|---|---|---|
-| LightGBM, default HPs (no tuning) | — | **+0.0278** | +4.35 |
-| LightGBM, held-out Optuna | ≤ 2024-12-31 | **+0.0191** | +3.02 |
-
-At 21-day horizon, default HPs beat held-out Optuna by 0.009 IC. The Optuna sweep — even with the eval slice strictly excluded from HP selection — picked HPs (`lambda_l1 = 0.10, lambda_l2 = 44.4`, `learning_rate = 0.097`, 519 trees) optimized for the 2017–2024 training regime that did not generalize to 2025+.
-
-This is consistent with DeMiguel-Garlappi-Uppal (2009)'s portfolio-optimization result generalized to HP optimization: estimation error in optimal parameters can overwhelm the theoretical benefit of optimization. The practical implication for cross-sectional equity ML: an Optuna-tuned model should not be deployed without first verifying its OOS IC exceeds the default-HP baseline. In this study, that verification step would have rejected the 21-day Optuna result entirely.
-
-The same Optuna protocol was also run at 5-day target horizon under three cutoffs (no cutoff, ≤ 2023-12-31, ≤ 2024-12-31). The full-sample IC drops monotonically with cutoff tightness — quantifying ~19% selection-bias inflation in the no-cutoff version — but the OOS-on-2025+ ranking is mixed because of regime non-stationarity. The 5-day sweep details are in the methodology appendix; they support Claim 2 but don't constitute a cleaner test than the 21-day result reported above.
-
-### Claim 3 — Linear regularization on collinear panels can produce significantly negative IC
-
-A failure-mode experiment: fit Lasso and ElasticNet on **only the four momentum factors** (12-1, 18-month, 24-month, 36-month). Pairwise correlations within the panel range 0.48 to 0.82.
-
-| Model | IC | t-stat | L/S Sharpe |
-|---|---|---|---|
-| Pure-momentum Lasso, 21-day | **−0.0185** | **−2.79** | −0.21 |
-| Pure-momentum ElasticNet, 21-day | −0.0185 | −2.79 | −0.21 |
-
-The results are **statistically significant negative IC** at t < −2.7. ElasticNet's CV consistently picked l1_ratio ≈ 1.0 (pure Lasso); L2 stabilization did not help. Lasso and ElasticNet predictions differ by IC 0.00005 — essentially identical.
-
-The mechanism is the canonical L1 cancellation pathology on collinear regressors. With four features all measuring "stocks that went up over multiple years," Lasso's soft-thresholding cannot cleanly select among them. The chosen coefficients flip signs erratically across walk-forward refits, producing predictions that are anti-correlated with realized returns out of sample. The same recipe with diverse features (the 9 economically-distinct anomalies from Claim 1) produces the strongest signal in the comparison; on a collinear-only panel it produces statistically significant *negative* IC.
-
-The diagnostic in `scripts/inspect_momentum_lasso_coefficients.py` confirms the cancellation pattern empirically.
-
-This claim has a positive corollary: **L1 regularization is not a free lunch on factor zoos.** The Han-He-Rapach-Zhou (2024) paper's key contribution is not "use Lasso on more features" but rather "curate the feature panel to one-per-economic-family before applying L1." This project's results confirm that empirically — the curated 9-feature panel produces strong positive IC; the same regularization on a single-family panel produces statistically-significant negative IC.
-
-### Legacy: v2 LightGBM survivorship-bias quantification
-
-The original primary estimate of the project (before the L1-regression comparison was introduced) was the v2 LightGBM at 22 features. The 2×3 ablation matrix below remains valid as a survivorship-bias quantification on that panel — the more important finding from that analysis was *how much* IC the PIT correction removed, not the absolute IC magnitude. The headline result has since shifted to the 9-feature L1 regression, but the PIT mechanics defined here apply to every model in the project.
-
-#### What "PIT correction" means in this project
-
-**Point-in-time (PIT) correction** restricts the cross-section evaluated
-on each date `t` to tickers that were *actually members of the S&P 500
-index on date `t`* — not the tickers that *are* members today. The
-correction defends against survivorship bias: today's S&P 500 list
-disproportionately contains companies that survived, by selection. A
-backtest evaluated on today's list silently assumes the model would have
-"known" in 2018 to focus on the 2026 survivors.
-
-The mechanics are isolated in two modules:
-
-- `src/price_model/data/sources/sp500_membership.py` scrapes the
-  Wikipedia "List of S&P 500 companies" page and its "Selected changes"
-  table to reconstruct, for every ticker that has ever been in the
-  index between 2014 and the present, an `(added_date, removed_date)`
-  membership window.
-- `src/price_model/data/membership.py::filter_panel_to_pit(panel)`
-  takes the long-format `(date, ticker, ...)` price panel and drops
-  every row whose `(date, ticker)` pair falls *outside* that ticker's
-  membership window. A stock added to the index on 2020-06-22 therefore
-  contributes only its post-2020-06-22 rows to training and evaluation;
-  a stock removed on 2019-04-30 contributes only its pre-2019-04-30
-  rows; a stock that joined in 2018 and left in 2022 contributes only
-  the rows for dates between those events.
-
-When `pit_filter=True` is passed to `load_panel(...)`, the membership
-filter is applied immediately after the yfinance fetch and before
-features or targets are constructed. The walk-forward harness then
-trains and evaluates only on the PIT-filtered cross-section. When
-`pit_filter=False`, the model sees today's universe back-projected
-across all dates — the "subset" column of the matrix below.
-
-The PIT correction in this project is partial because yfinance is
-missing data for ~12% of historical S&P 500 tickers (SIVB, FRC, ATVI,
-etc.; see [Data quality and methodological limitations](#data-quality-and-methodological-limitations)).
-A truly bias-free PIT analysis requires a paid feed.
-
-#### Universe × PIT × regime ablation (22-feature LightGBM)
-
-| | Subset universe (160 modern-survivor tickers, PIT OFF) | PIT-corrected universe (617 historical tickers, PIT ON) |
-|---|---|---|
-| **Full sample** (1758 dates) | IC = +0.0142, t = +4.05, Sharpe = +0.39 | IC = +0.0055, t = +1.51, Sharpe = +0.21 |
-| **Pre-Oct-2022** (853 dates) | IC = +0.0034, t = +0.64, Sharpe = −0.07 | IC = −0.0082, t = −1.38, Sharpe = −0.16 |
-| **Post-Oct-2022** (905 dates) | IC = +0.0244, t = +5.37, Sharpe = +0.94 | **IC = +0.0183, t = +4.34, Sharpe = +0.86** ← primary estimate |
-
-Three observations follow.
-
-**1. Survivorship-bias collapse varies sharply by regime.** Across rows:
-full-sample IC collapses from +0.0142 to +0.0055 under PIT correction
-(a **61% reduction**); pre-October-2022 IC **flips sign** from a noisy
-+0.0034 to a clear −0.0082; post-October-2022 IC collapses only 25%
-(from +0.0244 to +0.0183). Survivorship bias dominates when the
-underlying signal is weak (pre-2022 noise) and contributes far less when
-the signal is strong (post-2022 regime). A practitioner running the
-subset / full-sample backtest would observe +0.0142 IC at t = 4.05 and
-infer a credible statistically significant edge, 61% of which would be
-selection bias.
-
-**2. The regime effect is large and robust to universe.** Down columns:
-both universes show comparable regime shifts in Sharpe (subset:
-−0.07 → +0.94; PIT: −0.16 → +0.86). The post-October-2022 regime
-contains real cross-sectional signal that is not primarily a
-survivorship artifact. The IC magnitudes shift similarly (subset:
-+0.0034 → +0.0244, roughly 7×; PIT: −0.0082 → +0.0183, further amplified
-by the sign flip).
-
-**3. Pre-October-2022 IC on the PIT universe is negative with t = −1.38.**
-The 22-feature model would have actively lost on the cross-section
-before the regime break, not merely been flat. The finding is sharper
-than "the edge is concentrated post-2022": the edge is post-2022 *and*
-the opposite disedge is pre-2022. The features behave as a
-regime-conditional intensifier, amplifying whichever direction the
-cross-section is paying.
-
-#### v2 LightGBM feature-set ablation
-
-Holding the universe fixed at PIT-on and varying the feature set
-(chronological order of additions):
-
-| Features | Full sample IC | Full sample t | Post-Oct-2022 Sharpe |
-|---|---|---|---|
-| 13 technical only | +0.0008 | +0.24 | −0.04 |
-| 13 + 3 academic anomalies | +0.0033 | +0.96 | +0.083 |
-| **22 (+ 6 OHLCV / volume)** | **+0.0055** | **+1.51** | **+0.86** (regime split) |
-
-The OHLCV / volume batch is the largest single-batch incremental
-contribution. Each addition was tested on identical splits / embargo /
-walk-forward settings in apples-to-apples runs; the YAML configs
-(`extended_kaggle_v2_pit.yaml`, `extended_kaggle_v2_anomaly.yaml`,
-`extended_kaggle_v2_ohlcv.yaml`) make this auditable.
-
 ## Reproduction
 
 ### Step 0 — install and build the PIT universe (one-time, ~10-15 min cold)
@@ -372,10 +194,10 @@ The apples-to-apples script prints a diagnostic line identifying the model whose
 
 ### Step 3 (optional) — methodology audits
 
-The methodology appendix references three additional diagnostic scripts:
+The Methodology section references three additional diagnostic scripts:
 
 ```bash
-# Verify L1 cancellation hypothesis on the pure-momentum panel (Claim 3)
+# Verify L1 cancellation hypothesis on the pure-momentum panel (see Discussion)
 PYTHONPATH=src python scripts/inspect_momentum_lasso_coefficients.py
 
 # Apply Bailey-López de Prado deflated Sharpe correction across all models
@@ -388,11 +210,67 @@ PYTHONPATH=src python scripts/audit_lightgbm_features.py \
 
 The expected numbers in the comparison tables are deterministic for a fixed data snapshot. Small drift (< 5%) is expected as yfinance updates and Ken French refreshes monthly. The held-out Optuna sweeps are non-deterministic across re-runs (TPE sampler with a different random seed); the IC results have been stable within ±0.001 across attempted re-runs.
 
-## Methodology appendix
+## Methodology
 
-### The 9-feature L1 regression anomaly panel
+The headline result is produced by a walk-forward, cross-validated, point-in-time-corrected backtest. This section documents each component.
 
-The headline result comes from `lasso_elasso_pit_h21`, which applies L1-regularized cross-sectional regression (Lasso) to a 9-feature anomaly panel. The panel-curation principle — one feature per economically distinct anomaly family, documented academic attribution required, rank-normalized within each date — follows Han-He-Rapach-Zhou (2024). The panel:
+### Universe: S&P 500 with point-in-time membership filter
+
+**Point-in-time (PIT) correction** restricts the cross-section evaluated on each date `t` to tickers that were *actually members of the S&P 500 index on date `t`* — not the tickers that *are* members today. The correction defends against survivorship bias: today's S&P 500 list disproportionately contains companies that survived, by selection. A backtest evaluated on today's list silently assumes the model would have "known" in 2018 to focus on the 2026 survivors.
+
+The mechanics:
+
+- `src/price_model/data/sources/sp500_membership.py` scrapes the Wikipedia "List of S&P 500 companies" page and its "Selected changes" table to reconstruct, for every ticker that has ever been in the index between 2014 and the present, an `(added_date, removed_date)` membership window.
+- `src/price_model/data/membership.py::filter_panel_to_pit(panel)` drops every row whose `(date, ticker)` pair falls outside that ticker's membership window. A stock added on 2020-06-22 contributes only its post-2020-06-22 rows; a stock removed on 2019-04-30 contributes only its pre-2019-04-30 rows.
+
+The PIT correction in this project is **partial**: yfinance does not return data for ~12% of historical S&P 500 tickers (SIVB, FRC, ATVI, AGN, etc. — see [Data quality and methodological limitations](#data-quality-and-methodological-limitations)). A bias-free PIT analysis requires a paid feed (CRSP or Norgate Premium Data).
+
+### Forecast target and walk-forward training
+
+The forecast target is the cross-sectional excess log-return over a fixed horizon. For each date `t` and ticker `i`, the target `y[t, i]` is the log-return of `i` from `t+1` to `t+H` minus the cross-sectional mean log-return over the same window. The headline uses `H = 21` trading days (approximately one month); the same framework is implemented at `H = 5` and is configurable per experiment via `target_horizon` in the YAML configs.
+
+**Walk-forward training** refits every model on an expanding window:
+
+- `min_train_days = 504` — first prediction date is approximately 2 years after panel start (warmup period).
+- `refit_freq_days = 252` (linear and momentum models) or `21` (LightGBM) — annual or monthly refit cadence.
+- `embargo_days = H + 1` — 6 days for 5-day target, 22 days for 21-day target. The embargo ensures the last training label (which depends on dates `t+1` through `t+H`) does not overlap with the first validation prediction.
+
+For the 21-day headline result, the walk-forward harness produces 8 refits across the 2017→2026 panel. Predictions in 2025-01 → 2026-01 use weights from a refit whose training data ended in late 2024 (causally OOS for 2025+ dates); predictions in early 2026 → 2026-04 use weights from a refit whose training data ended in late 2025.
+
+**Lookahead safety** is verified by the "truncation-invariance" leakage test in `tests/test_leakage.py`: the prediction at date `t` must be unchanged when the entire panel is truncated to dates `≤ t`. Every feature and every model is exercised against this test in CI.
+
+### Inner cross-validation for regularization-strength selection
+
+For the L1 (Lasso), L2 (Ridge), and L1+L2 (ElasticNet) cross-sectional models, the regularization strength is selected by **5-fold inner cross-validation within each refit's training window**:
+
+- `LassoCV` (sklearn): 100-point geometric grid over α, 5-fold CV, α chosen to minimize pooled CV mean-squared error.
+- `RidgeCV` (sklearn): 20-point log-spaced grid over α (project override of sklearn default which is too coarse), 5-fold CV, generalized CV.
+- `ElasticNetCV` (sklearn): joint search over α and l1_ratio (default grid `[0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]`), 5-fold CV.
+
+The CV splits are random within the training window (sklearn default). No user-specified α; sklearn picks a data-appropriate grid. This means the L1 regression has **no user-tunable hyperparameters at deployment time** — α is fully data-driven per refit. The surviving non-zero coefficients are themselves an empirical finding interpretable in factor-zoo terms.
+
+The walk-forward, inner-CV combination means each refit's α is selected on data the deployment slice has never seen.
+
+### Held-out Optuna protocol for LightGBM hyperparameter search
+
+LightGBM has more hyperparameters than CV can search inside a refit. Instead, the project uses **Optuna with purged walk-forward CV** (de Prado, *Advances in Financial Machine Learning*, Ch. 7) for hyperparameter selection.
+
+The HP-selection bias correction is provided by the `--max-date` flag in `scripts/optuna_sweep.py`: dates after the specified cutoff are excluded from the matrix before CV folds are constructed, so the chosen HPs are provably independent of any data in the post-cutoff evaluation slice.
+
+Four sweeps (all evaluated on the 2025+ apples-to-apples slice):
+
+| Sweep | Target horizon | Cutoff | Trials | CV mean IC (training) | 2025+ OOS IC |
+|---|---|---|---|---|---|
+| HP-leaked baseline | 5-day | none — HPs saw all data | 100 | +0.02476 | +0.0046 |
+| Split A (held-out) | 5-day | ≤ 2023-12-31 | 100 | +0.01934 | +0.0015 |
+| Split B (held-out) | 5-day | ≤ 2024-12-31 | 100 | +0.01540 | +0.0080 |
+| 21-day held-out | 21-day | ≤ 2024-12-31 | 100 | +0.01709 | +0.0191 |
+
+The chosen hyperparameters differ substantially across cutoffs (e.g., 5-day Split A picked `lambda_l1=1.79`, 21-day held-out picked `lambda_l1=0.10` with `lambda_l2=44.4` — 18× lower L1, 222× higher L2). CV mean IC computed inside Optuna's training window is not a reliable predictor of OOS IC; see [Discussion](#discussion) for analysis.
+
+### 9-feature anomaly panel (headline L1 regression)
+
+The headline result `lasso_elasso_pit_h21` uses a 9-feature panel curated on the principle of "one feature per economically distinct anomaly family":
 
 | # | Feature | Anomaly family | Reference |
 |---|---|---|---|
@@ -406,54 +284,99 @@ The headline result comes from `lasso_elasso_pit_h21`, which applies L1-regulari
 | 8 | `log_dollar_volume` | Size / liquidity | Amihud 2002 |
 | 9 | `beta_60` | Market exposure control (BAB-adjacent) | Frazzini-Pedersen 2014 |
 
-The 9 features were chosen ex-ante to span economically distinct mechanisms; pairwise correlations within the panel are typically below 0.3 (verified empirically), satisfying the L1-stability prerequisite. The α regularization strength is selected by 5-fold inner CV at each annual refit; the surviving non-zero coefficients are themselves an empirical finding interpretable in factor-zoo terms.
+The 9 features were chosen ex-ante to span economically distinct mechanisms. Pairwise correlations within the panel are typically below 0.3 (verified empirically), satisfying the L1-stability prerequisite. Each feature is **rank-normalized within each date** (cross-sectional rank, then scaled to `[0, 1]`) — robust to fat tails, matches the asset-pricing literature convention, and prevents any single outlier observation from dominating the regression. The curation principle follows Han-He-Rapach-Zhou (2024).
 
-### Held-out Optuna protocol
+### Net-of-cost decomposition
 
-The Optuna sweep optimizes mean cross-validation IC across purged walk-forward CV folds (de Prado, *Advances in Financial Machine Learning*, Ch. 7) within a fixed training window. The HP-selection bias correction is provided by the `--max-date` flag in `scripts/optuna_sweep.py`: dates after the specified cutoff are excluded from the matrix before CV folds are constructed, so the chosen HPs are provably independent of any data in the post-cutoff evaluation slice.
+Gross IC and gross long-short Sharpe assume costless rebalancing. Net-of-cost Sharpe accounts for transaction-cost drag from portfolio turnover. For each date, **daily turnover** is computed as the L1 distance between today's and yesterday's normalized long-short weight vectors. Annual turnover = `mean(daily turnover) × 252`. **After-cost daily return** = gross return − `daily_turnover × cost_bps / 10000`. After-cost Sharpe is computed on the net-return series with the same `√(252 / horizon)` annualization as gross Sharpe.
 
-Four sweeps documented in the executive summary, all evaluated on the 2025+ apples-to-apples slice (350 dates at 5-day horizon, 334 dates at 21-day horizon):
-
-| Sweep | Target horizon | Cutoff | Trials | CV mean IC (training) | 2025+ OOS IC | Notes |
-|---|---|---|---|---|---|---|
-| HP-leaked baseline | 5-day | none — HPs saw all data | 100 | +0.02476 | +0.0046 | Selection bias inflates CV IC; modest 2025+ OOS |
-| Split A (held-out) | 5-day | ≤ 2023-12-31 | 100 | +0.01934 | +0.0015 | HPs only saw pre-2024; weak 2025+ OOS |
-| Split B (held-out) | 5-day | ≤ 2024-12-31 | 100 | +0.01540 | +0.0080 | Recent HP-selection data → better 2025+ OOS than Split A |
-| 21-day held-out | 21-day | ≤ 2024-12-31 | 100 | +0.01709 | +0.0191 | Underperforms 21-day default (+0.0278) |
-
-The chosen hyperparameters differ substantially across cutoffs (e.g., 5-day Split A picked `lambda_l1=1.79`, 21-day held-out picked `lambda_l1=0.10` with `lambda_l2=44.4` — 18× lower L1, 222× higher L2), confirming HP non-stationarity across regimes. CV mean IC (computed on training data inside Optuna) is not a reliable predictor of 2025+ OOS IC; for the 21-day held-out sweep, CV mean IC of +0.01709 was lower than the eventual 2025+ OOS of +0.0191 — but still below the default-HP 2025+ OOS of +0.0278.
-
-### Pure-momentum Lasso cancellation diagnostic
-
-`scripts/inspect_momentum_lasso_coefficients.py` fits Lasso and ElasticNet on the four-feature pure-momentum panel and prints the fitted coefficients alongside the feature correlation matrix. The diagnostic confirms:
-
-1. Pairwise correlations between momentum features at 0.48-0.82 (mom_504 ↔ mom_756 at 0.75, mom_378 ↔ mom_504 at 0.82).
-2. The CV-selected α drives all coefficients to zero — the model collapses to predicting the intercept, which is approximately zero on rank-normalized data. The realized predictions inherit the sign of the (small, noisy) constant term, producing systematic anti-correlation with realized returns.
-3. ElasticNet at this collinear panel picks l1_ratio ≈ 0.1 (near-Ridge) — confirming the L1 sparsity is the failure mode — but the alternate coefficient solutions also fail to generalize because the underlying issue is feature design, not regularization mix.
-
-The diagnostic is mentioned in Claim 3 because the empirical mechanism is more nuanced than "L1 splits weight into cancelling signs." The actual mechanism is "L1 cannot find a stable subspace solution on heavily collinear features at the regularization scale CV selects, so it converges to all-zero."
-
-### Walk-forward harness, embargo, refit cadence
-
-All comparisons use the project's walk-forward harness in `src/price_model/pipeline/walk_forward.py`. Default parameters across the headline experiments:
-
-- `min_train_days: 504` — first prediction is at least 2 years into the panel
-- `refit_freq_days: 252` (linear/momentum models) or `21` (LightGBM) — annual or monthly refit
-- `embargo_days: 6` (5-day target) or `22` (21-day target) — one day more than the target horizon to prevent label overlap leakage
-
-Predictions for date `t` use weights trained on data through `t − embargo`. Lookahead safety verified via the "truncation-invariance" leakage test in `tests/test_leakage.py`: prediction at date `t` must be unchanged when the panel is truncated to dates ≤ `t`.
+Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-equivalent). The full decomposition is in `scripts/compare_net_of_cost.py`. Turnover and cost-drag mechanics are implemented in `src/price_model/eval/turnover.py`.
 
 ### Bailey-López de Prado deflated Sharpe (multi-test correction)
 
 `scripts/deflated_sharpe_audit.py` applies the deflated Sharpe ratio (Bailey & López de Prado 2014) across all project models. The correction inflates the effective number of trials by the project's experiment count and accounts for skew and kurtosis of the return distribution to compute `P(true_Sharpe > 0 | observed)`. Threshold for "significant after multi-test correction" is DSR > 0.95.
 
-The deflated-Sharpe pass list for the 21-day comparison aligns with the t-stat ranking — the high-t-stat L1 regression and momentum factors clear DSR > 0.99; the LightGBM held-out tuned at t=+3.02 clears DSR > 0.95; lower-t-stat models (XGBoost, CatBoost) do not clear.
+The deflated-Sharpe pass list for the 21-day comparison aligns with the t-stat ranking — the high-t-stat L1 regression and momentum factors clear DSR > 0.99; the LightGBM held-out-tuned at t = +3.02 clears DSR > 0.95; lower-t-stat models do not clear.
 
-### The regime indicator (`cs_return_dispersion_20`)
+### Pure-momentum Lasso cancellation diagnostic
 
-The 14-feature LightGBM v3 panel includes `cs_return_dispersion_20` — a contemporaneously-observable feature defined as the cross-sectional standard deviation of daily log returns, smoothed by 20-day rolling mean. The feature is documented as a lookahead-safe regime conditioning variable: when added to the panel, the LightGBM has access to a signal that distinguishes high-dispersion (idiosyncratic-pricing) regimes from low-dispersion (uniform-market-move) regimes without using any forward-looking regime labels. Implementation in `src/price_model/features/cross_features.py::CsReturnDispersion20`; lookahead safety verified by `tests/test_microstructure_features.py`.
+`scripts/inspect_momentum_lasso_coefficients.py` fits Lasso and ElasticNet on a four-feature pure-momentum panel (12-1, 18-month, 24-month, 36-month) and prints the fitted coefficients alongside the feature correlation matrix. The diagnostic confirms:
 
-The audit-driven 14-feature LightGBM panel is documented inline in `config/experiments/extended_kaggle_v3_curated.yaml`, including the LightGBM gain-importance and cross-feature correlation analysis that motivated the curation (audit script: `scripts/audit_lightgbm_features.py`).
+1. Pairwise correlations between momentum features at 0.48–0.82 (e.g., `momentum_504 ↔ momentum_756` at 0.75).
+2. The CV-selected α drives all coefficients to (near) zero — the model collapses to predicting the intercept. The realized predictions inherit the sign of the small noisy intercept, producing systematic anti-correlation with realized returns.
+3. ElasticNet picks l1_ratio close to 1.0 (essentially pure Lasso) — L2 stabilization does not help on a heavily-collinear panel.
+
+This diagnostic supports the discussion of why pure-momentum L1 produces negative OOS IC (see [Discussion](#discussion)).
+
+### Regime indicator and audit-driven LightGBM v3 panel
+
+The 14-feature LightGBM v3 panel includes `cs_return_dispersion_20` — the cross-sectional standard deviation of daily log returns smoothed by 20-day rolling mean. The feature is a lookahead-safe regime conditioning variable that distinguishes high-dispersion (idiosyncratic-pricing) regimes from low-dispersion (uniform-market-move) regimes without using forward-looking labels. Implementation in `src/price_model/features/cross_features.py::CsReturnDispersion20`; lookahead safety verified by `tests/test_microstructure_features.py`.
+
+The v3 panel curation (14 features chosen from a 21-feature candidate panel via gain importance + cross-feature correlation analysis) is documented inline in `config/experiments/extended_kaggle_v3_curated.yaml`; audit script in `scripts/audit_lightgbm_features.py`.
+
+## Discussion
+
+The headline finding — a 9-feature L1 regression beats every tested ML variant at 21-day horizon, with long-horizon momentum factors winning on net-of-cost Sharpe — is decisive within the scope of this study but raises four questions worth unpacking. This section addresses each.
+
+### Why the L1 regression dominates ML on this universe
+
+**The 21-day cross-sectional signal on the post-2024 S&P 500 is approximately linear in feature space.** Three pieces of evidence:
+
+1. **The momentum factors alone capture most of the signal.** mom_504, mom_756, and mom_378 individually produce IC = +0.04 to +0.05 with no model fitting; the L1 regression's incremental edge of +0.02 IC over the best single momentum factor reflects modest additional signal from non-momentum features (low-volatility, idiosyncratic volatility, MAX effect). The dominant component is a linear momentum signal that trees would have to recover via many small splits.
+2. **Tree-ensemble gain-importance audits show feature concentration.** On the 14-feature v3 panel, three features produce 39% of LightGBM gain. The split structure devotes most of its capacity to a handful of features that L1 can express as a small number of coefficients. Trees' theoretical interaction-capturing advantage doesn't pay off here because the dominant signal isn't interactive.
+3. **Optuna-tuned LightGBM still falls short.** Even when the LightGBM HPs are explicitly searched to maximize OOS IC, the result trails the L1 regression by 0.04+ IC. The gap is not a tuning failure.
+
+Two caveats limit how broadly this conclusion generalizes:
+
+- **The 9-feature panel is small and ex-ante-curated.** The L1 regression's advantage depends on this curation. On the broader 14-feature LightGBM panel (audit-driven, no economic-family constraint), the same L1 recipe produces a weaker signal.
+- **The post-2024 regime is structurally momentum-friendly.** In a regime with more leadership rotation or weaker momentum persistence, the linear-on-momentum recipe would compress and ML might catch up. The result is robust within the studied 16-month evaluation period but has not been verified across regime changes.
+
+The conclusion is therefore "in this regime on this universe at this horizon, L1 regression on a carefully curated 9-feature panel outperforms every tree-ensemble variant tested" — not "ML cannot succeed in cross-sectional equity prediction generally."
+
+### Why long-horizon momentum wins after transaction costs
+
+**Turnover dominates the gross-vs-net comparison.** The 36-month momentum factor has an annual turnover of 15× (it rebalances roughly twice per quarter). The L1 regression has 128× annual turnover (essentially full rebalancing every two days). LightGBM variants have 130–150× turnover. At 20 bp per side, the cost drag is:
+
+- 36-month momentum: 15 × 20 bp × 2 / 10000 = 0.6% annual drag → retains 99% of gross Sharpe.
+- L1 regression: 128 × 20 bp × 2 / 10000 = 5.1% annual drag → retains 84% of gross Sharpe.
+- LightGBM (default): 130 × 20 bp × 2 / 10000 = 5.2% annual drag → retains 84% of gross Sharpe.
+
+The L1 regression's gross IC advantage of +0.020 over mom_756 translates to a gross-Sharpe deficit of −0.58 once both are turnover-adjusted. Net at 20 bp, mom_756 leads by +0.63 Sharpe.
+
+**Why the post-2024 regime amplifies the long-horizon advantage:** the Mag-7 megacap concentration and AI-sector winners-keep-winning pattern means multi-year leaders persist, so a 36-month momentum factor's holdings are stable across refits. In a regime with more frequent leadership rotation, the advantage would compress because mom_756's turnover would naturally rise. This is the cleanest regime-dependent finding in the project.
+
+### Why hyperparameter optimization is fragile to regime shift
+
+**Optuna minimizes CV error on training data, not OOS error on deployment data.** When the training period is a different statistical regime from the deployment period, the HPs that minimize training-period CV error don't minimize deployment-period OOS error. The gap between train-optimal HPs and deploy-optimal HPs grows with regime divergence.
+
+This is exactly the **DeMiguel-Garlappi-Uppal (2009)** result generalized: they showed that the optimal portfolio weights estimated from historical returns underperform the equal-weight (1/N) portfolio out-of-sample because estimation error in optimal weights overwhelms the theoretical benefit of optimization. The same logic applies to HP search:
+
+- **Default HPs are like 1/N.** They don't fit training data as hard, so they generalize better.
+- **Optuna-selected HPs are like Markowitz weights.** They minimize a training-period objective but inherit the estimation error.
+
+The 21-day result is the cleanest demonstration: held-out Optuna at 21-day target scored OOS IC +0.0191 vs default HPs' +0.0278. Even with the deployment slice strictly excluded from HP selection, the chosen HPs underperformed defaults by 0.009 IC.
+
+**Practical implication:** an Optuna-tuned model should not be deployed without first verifying its OOS IC exceeds the default-HP OOS IC on a slice the HPs never saw. In this study, that verification step would have rejected the 21-day Optuna result entirely.
+
+The 5-day evidence is mixed (Split B beats Split A on 2025+ OOS but Split A beats Split B on full-sample), which is itself a regime-mismatch signature: the HPs Optuna chose with more recent training data fit recent patterns better but generalized worse to earlier periods.
+
+### Why pure-momentum L1 produces statistically significant negative IC
+
+The mechanism is **L1 cancellation on collinear features**, with a twist documented by the diagnostic script:
+
+1. **The pure-momentum panel has high pairwise correlations.** mom_504 ↔ mom_756 = 0.75; mom_378 ↔ mom_504 = 0.82; mom_12_1 ↔ mom_378 = 0.72. All four features measure "did this stock go up over some multi-month window."
+2. **At the α level CV selects, all coefficients are driven to zero.** The model collapses to predicting the intercept term, which on rank-normalized features is approximately zero. The realized predictions inherit the sign of the small noisy intercept.
+3. **The noisy intercept is systematically anti-correlated with realized returns** across walk-forward refits, producing statistically significant negative IC.
+
+ElasticNet does not help because the L2 component cannot stabilize the unstable L1 subspace at the CV-selected α magnitude.
+
+The positive corollary: **L1 regularization is not a free lunch on factor zoos.** The Han-He-Rapach-Zhou (2024) paper's substantive contribution is the *panel-curation principle* (one feature per economic family), not the choice of regularization. This project's results confirm that empirically — the curated 9-feature panel produces +0.0697 IC; the same regularization on a single-family panel produces −0.019 IC. **Feature-panel design matters more than regularization choice.**
+
+### Synthesizing thesis
+
+The four observations above point to one unifying conclusion: **on the post-2024 S&P 500 at the 21-day horizon, the cross-sectional return signal is dominated by slow-moving systematic patterns (long-horizon momentum + a small set of documented anomalies) that linear models with conservative regularization recover more efficiently than tree ensembles.** Tree ensembles have the theoretical capacity to express any function the linear model can, but in practice they pay an estimation-error tax that — combined with their higher turnover — produces uniformly worse gross and net results in this regime.
+
+A cleaner test of "is this finding regime-specific or general" would require running the same comparison on multiple non-overlapping deployment windows (e.g., 2010–2014, 2014–2018, 2018–2022, 2022–2026) with paid PIT-correct data. That multi-window stress test is the most-needed extension of this work and is enumerated in [Scope and limitations](#scope-and-limitations).
 
 ## Data quality and methodological limitations
 
@@ -689,7 +612,7 @@ a product of the above collaboration.
 - **Fama, E. and French, K.** (2015). "A Five-Factor Asset Pricing Model." *Journal of Financial Economics* 116(1). — FF5 baseline (reference only; not in the headline comparison due to Kenneth French release-lag truncation).
 - **Zou, H. and Hastie, T.** (2005). "Regularization and Variable Selection via the Elastic Net." *Journal of the Royal Statistical Society, Series B* 67(2). — ElasticNet model class.
 - **Bailey, D. and López de Prado, M.** (2014). "The Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting, and Non-Normality." *Journal of Portfolio Management* 40(5). — Multi-test Sharpe correction.
-- **DeMiguel, V., Garlappi, L., and Uppal, R.** (2009). "Optimal Versus Naive Diversification: How Inefficient is the 1/N Portfolio Strategy?" *Review of Financial Studies* 22(5). — The estimation-error-dominates-optimization result referenced in Claim 2.
+- **DeMiguel, V., Garlappi, L., and Uppal, R.** (2009). "Optimal Versus Naive Diversification: How Inefficient is the 1/N Portfolio Strategy?" *Review of Financial Studies* 22(5). — The estimation-error-dominates-optimization result referenced in the Discussion's "Why HP optimization is fragile to regime shift" subsection.
 - **López de Prado, M.** (2018). *Advances in Financial Machine Learning.* Wiley. — Purged walk-forward cross-validation (Ch. 7).
 - **Ken French Data Library.** Daily factor returns. https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
 - **Wikipedia: List of S&P 500 companies.** Historical components and change log. https://en.wikipedia.org/wiki/List_of_S%26P_500_companies
