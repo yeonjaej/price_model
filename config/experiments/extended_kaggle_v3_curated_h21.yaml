@@ -1,0 +1,90 @@
+# 21-day-horizon variant of extended_kaggle_v3_curated.
+#
+# Why this exists
+# ---------------
+# The strict HP-free 2025+ comparison at 5-day horizon showed every tuned-
+# LightGBM variant (original tuned, Split A held-out, Split B held-out)
+# trailing mom_12_1 by >0.022 IC. The question this config answers:
+# is the ML underperformance specifically a 5-day artifact, or does it
+# also hold at the more classical 21-day (monthly) horizon?
+#
+# Two hypotheses:
+#
+#   H_horizon_specific: ML loses at 5-day because the 5-day-horizon
+#     signal is dominated by short-term noise that trees overfit to.
+#     At 21-day, the smoother target lets ML find more structure and
+#     potentially close the gap to mom_12_1.
+#
+#   H_structural: ML loses regardless of horizon because cross-sectional
+#     momentum is the dominant signal in this regime, period. 21-day
+#     just makes mom_12_1's advantage MORE visible.
+#
+# Hyperparameters
+# ---------------
+# Using the base v3_curated HPs (NOT the Optuna-tuned ones). Justifying
+# this choice: the Optuna sweep was run at target_horizon=5; the best HPs
+# it found are optimized for short-horizon noise structure, not for
+# 21-day. Using untuned base HPs avoids that mismatch. If this 21-day
+# variant shows promise, a 21-day-specific Optuna sweep would be the
+# proper follow-up.
+#
+# Walk-forward changes
+# --------------------
+# embargo_days: 6 → 22. The label window for target_horizon=21 spans
+# [t+1, t+22], so we need >= 22 days between last train date and first
+# val date to prevent label-overlap leakage.
+
+experiment_id: extended_kaggle_v3_curated_h21
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - abnormal_volume
+  - distance_52w_high
+  - mom60_minus_dist_ma200
+  - return_5d
+  - max_return_21d
+  - momentum_12_1
+  - rsi_14
+  - log_dollar_volume
+  - vol_ewm_20
+  - momentum_60_rank
+  - cs_return_dispersion_20
+  - sector_relative_return_5d
+  - momentum_504
+  - beta_60
+
+normalize_kind: zscore
+target_horizon: 21
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 22
+  min_train_days: 504
+
+models:
+  - id: zero_v1_ohlcv_curated_h21
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_kaggle_v3_curated_h21
+    class: LightGBMModel
+    params:
+      # Base v3_curated HPs — NOT Optuna-tuned. The Optuna sweep was
+      # against target_horizon=5; reusing those HPs at horizon=21 would
+      # be a horizon mismatch.
+      learning_rate: 0.02
+      num_leaves: 64
+      min_data_in_leaf: 200
+      feature_fraction: 0.7
+      bagging_fraction: 0.7
+      bagging_freq: 5
+      lambda_l1: 0.1
+      lambda_l2: 5.0
+      n_estimators: 1000
+      val_fraction: 0.1
+      early_stopping_rounds: 100
+      seeds: [42, 2024, 12345]

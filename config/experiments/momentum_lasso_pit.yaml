@@ -1,0 +1,72 @@
+# Pure-momentum Lasso (L1) baseline at 5-day target horizon.
+#
+# Why this exists
+# ---------------
+# The user-asked-for question: instead of an equal-weight ensemble of
+# {mom_12_1, mom_378, mom_504, mom_756}, what does cross-validated L1 do?
+#
+# This is the principled answer for "best linear combination of correlated
+# momentum signals." L1 will tend to:
+#   1. Zero out features that are redundant given the others (likely
+#      mom_378 or mom_504, which are highly collinear with mom_756).
+#   2. Concentrate weight on the strongest factor (mom_756 on this universe).
+#   3. Possibly retain a small weight on mom_12_1 if its 1-month-skip
+#      structure carries different signal from the long-horizon factors.
+#
+# How this differs from lasso_elasso_pit_v1
+# -----------------------------------------
+# lasso_elasso_pit_v1 has 9 features spanning momentum, vol, MAX, 52w-high,
+# liquidity, and beta. This config is PURE momentum — 4 features, all of
+# the same family (cross-sectional momentum at different lookback windows).
+# The narrow scope answers a different question: among the momentum factors
+# alone, can L1 learn a useful weighted combination?
+#
+# Companion configs
+# -----------------
+#   momentum_lasso_pit_h21.yaml     — same panel, 21-day target horizon
+#   momentum_elasticnet_pit.yaml    — L1+L2 hybrid, 5-day
+#   momentum_elasticnet_pit_h21.yaml — L1+L2 hybrid, 21-day
+#
+# Expected outcome
+# ----------------
+# At 5-day on 2025+: best constituent mom_756 IC +0.0322. Lasso likely
+# selects mom_756 alone (or with small weight on mom_12_1). Expected
+# Lasso IC: +0.030 to +0.033 — neither materially better nor worse than
+# the best single factor. The interesting diagnostic is which features
+# survive L1 selection across walk-forward refits.
+
+experiment_id: momentum_lasso_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_378
+  - momentum_504
+  - momentum_756
+
+normalize_kind: rank   # matches HHRZ recipe; robust to fat tails
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_momentum_lasso_baseline
+    class: ZeroPredictor
+    params: {}
+
+  - id: momentum_lasso_pit_v1
+    class: LassoCrossSectional
+    params:
+      cv: 5
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true
+      # alphas: null → sklearn default geometric grid (100 values)

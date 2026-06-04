@@ -1,0 +1,48 @@
+# Pure-momentum ElasticNet at 21-day target horizon.
+#
+# Same panel and HP grid as momentum_elasticnet_pit.yaml; the only
+# changes are target_horizon: 21 and embargo_days: 22.
+#
+# Hypothesis at 21-day specifically
+# ---------------------------------
+# At 21-day, the four constituent ICs are closer together and all higher
+# than at 5-day. The L2 stabilization should matter more here because
+# (a) the per-feature signal-to-noise is higher, so we can spread weight
+# without diluting too much, and (b) the constituents are even more
+# correlated at long horizons (they're all measuring multi-year drift).
+# Predicted CV selection: l1_ratio around 0.5-0.7, alpha low to moderate.
+
+experiment_id: momentum_elasticnet_pit_h21
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_378
+  - momentum_504
+  - momentum_756
+
+normalize_kind: rank
+target_horizon: 21
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 22
+  min_train_days: 504
+
+models:
+  - id: zero_v1_momentum_elasticnet_baseline_h21
+    class: ZeroPredictor
+    params: {}
+
+  - id: momentum_elasticnet_pit_h21
+    class: ElasticNetCrossSectional
+    params:
+      cv: 5
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true

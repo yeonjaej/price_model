@@ -9,6 +9,7 @@ from __future__ import annotations
 from price_model.models.base import Model, ModelConfig
 from price_model.models.baseline import LastReturnPredictor, MomentumFactor, ZeroPredictor
 from price_model.models.boosting import LightGBMModel
+from price_model.models.boosting_alternatives import CatBoostModel, XGBoostModel
 from price_model.models.classical import (
     ArimaPerTicker,
     FamaFrenchFactorModel,
@@ -16,7 +17,11 @@ from price_model.models.classical import (
     GbmMaximumLikelihood,
 )
 from price_model.models.foundation import ChronosZeroShot
-from price_model.models.linear import LassoCrossSectional
+from price_model.models.linear import (
+    ElasticNetCrossSectional,
+    LassoCrossSectional,
+    RidgeCrossSectional,
+)
 
 # Classical and foundation models import cleanly without their optional deps;
 # import errors are deferred to fit() / predict() time. So the registry hard-binds
@@ -26,7 +31,11 @@ MODEL_REGISTRY: dict[str, type[Model]] = {
     "LastReturnPredictor": LastReturnPredictor,
     "MomentumFactor": MomentumFactor,
     "LightGBMModel": LightGBMModel,
+    "XGBoostModel": XGBoostModel,
+    "CatBoostModel": CatBoostModel,
     "LassoCrossSectional": LassoCrossSectional,
+    "RidgeCrossSectional": RidgeCrossSectional,
+    "ElasticNetCrossSectional": ElasticNetCrossSectional,
     "ChronosZeroShot": ChronosZeroShot,
     # Classical baselines (need [classical] extras to actually fit)
     "ArimaPerTicker": ArimaPerTicker,
@@ -46,7 +55,9 @@ def build_model(class_name: str, config: ModelConfig) -> Model:
 __all__ = [
     "MODEL_REGISTRY",
     "ArimaPerTicker",
+    "CatBoostModel",
     "ChronosZeroShot",
+    "ElasticNetCrossSectional",
     "FamaFrenchFactorModel",
     "GarchVolForecaster",
     "GbmMaximumLikelihood",
@@ -56,6 +67,8 @@ __all__ = [
     "Model",
     "ModelConfig",
     "MomentumFactor",
+    "RidgeCrossSectional",
+    "XGBoostModel",
     "ZeroPredictor",
     "build_model",
 ]

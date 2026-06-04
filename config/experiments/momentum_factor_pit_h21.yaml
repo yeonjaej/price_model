@@ -1,0 +1,76 @@
+# 21-day-horizon variant of momentum_factor_pit.
+#
+# Why this exists
+# ---------------
+# The 5-day-horizon comparison on the 2025+ slice showed momentum factors
+# (especially mom_756) dominating every ML approach. This config tests
+# whether the dominance persists at a 21-day (monthly) horizon — the
+# classical horizon at which Jegadeesh-Titman 12-1 was originally
+# documented. Two predictions worth checking:
+#
+#   (1) Momentum IC at 21-day > 5-day: momentum is a long-horizon signal,
+#       so longer holding periods should amplify cross-sectional IC.
+#   (2) Momentum turnover at 21-day << 5-day: longer-horizon momentum has
+#       less ranking churn, so realized turnover and net-cost drag drop.
+#
+# If both hold, the 21-day comparison strengthens the negative-finding
+# narrative further.
+#
+# Walk-forward changes
+# --------------------
+# embargo_days: 6 → 22. The label window for target_horizon=21 spans
+# [t+1, t+22], so we need at least 22 days between last train date and
+# first val date to prevent label-overlap leakage.
+#
+# refit_freq_days stays at 252 (annual). The signal's slow nature doesn't
+# warrant faster refitting at this horizon.
+
+experiment_id: momentum_factor_pit_h21
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_378
+  - momentum_504
+  - momentum_756
+
+normalize_kind: zscore
+target_horizon: 21
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 22
+  min_train_days: 504
+
+models:
+  - id: mom_378_factor_h21
+    class: MomentumFactor
+    features:
+      - momentum_378
+    params:
+      feature_name: momentum_378
+
+  - id: mom_504_factor_h21
+    class: MomentumFactor
+    features:
+      - momentum_504
+    params:
+      feature_name: momentum_504
+
+  - id: mom_12_1_factor_h21
+    class: MomentumFactor
+    features:
+      - momentum_12_1
+    params:
+      feature_name: momentum_12_1
+
+  - id: mom_756_factor_h21
+    class: MomentumFactor
+    features:
+      - momentum_756
+    params:
+      feature_name: momentum_756

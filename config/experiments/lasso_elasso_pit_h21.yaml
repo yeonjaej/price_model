@@ -1,0 +1,58 @@
+# 21-day-horizon variant of lasso_elasso_pit.
+#
+# Why this exists
+# ---------------
+# On the 5-day 2025+ slice, HHRZ E-LASSO was the strongest non-momentum-
+# factor model (IC +0.0249, t=2.72, L/S Sharpe +1.08). At 21-day horizon
+# the question is whether the linear-on-documented-anomalies recipe holds
+# its relative position, and whether the monthly turnover penalty (5-day
+# version: 277x annual, destroys after-cost Sharpe) drops to something
+# tractable at 21-day.
+#
+# Walk-forward changes
+# --------------------
+# embargo_days: 6 → 22. Same reasoning as for the other h21 configs.
+#
+# Other config (rank normalization, annual refit) preserved exactly to
+# isolate the horizon effect from any other recipe change.
+
+experiment_id: lasso_elasso_pit_h21
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_756
+  - return_1d
+  - vol_ewm_20
+  - idio_vol_20
+  - max_return_21d
+  - distance_52w_high
+  - log_dollar_volume
+  - beta_60
+
+normalize_kind: rank
+target_horizon: 21
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 22
+  min_train_days: 504
+
+models:
+  - id: zero_v1_elasso_baseline_h21
+    class: ZeroPredictor
+    params: {}
+
+  - id: lasso_elasso_pit_h21
+    class: LassoCrossSectional
+    params:
+      cv: 5
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true
+      # alphas: null → use sklearn's default geometric grid (100 values)

@@ -1,0 +1,64 @@
+# Pure-momentum ElasticNet (L1 + L2 hybrid, Zou-Hastie 2005) at 5-day.
+#
+# Why ElasticNet specifically
+# ---------------------------
+# Pure Lasso's failure mode on collinear panels: when features are highly
+# correlated (mom_378, mom_504, mom_756 are all measuring "stocks that
+# went up over multiple years"), L1 picks one arbitrarily and zeros the
+# others — or splits weight into cancelling signs. ElasticNet's L2
+# component shares weight smoothly across the correlated subspace while
+# the L1 component still drops genuinely irrelevant features.
+#
+# The l1_ratio CV grid spans [0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]:
+#   1.0   → pure Lasso (no L2 stabilization)
+#   0.5   → equal mix
+#   0.1   → mostly Ridge (smooth shrinkage, no sparsity)
+# If CV consistently picks a value around 0.5-0.9 across refits, the
+# hybrid is earning its keep over either extreme. If it picks 1.0, pure
+# Lasso would be equivalent (the L2 wasn't useful). If it picks <0.5,
+# pure Ridge would be effectively equivalent.
+#
+# Expected outcome on this panel
+# ------------------------------
+# Heavy collinearity in {mom_378, mom_504, mom_756}: I'd predict CV picks
+# l1_ratio around 0.5-0.7 so L2 stabilizes the correlated subspace.
+# mom_12_1's correlation with the others is moderate (~0.3-0.5), so it
+# may either receive small positive weight or be zeroed depending on
+# how much marginal signal it carries beyond mom_756.
+
+experiment_id: momentum_elasticnet_pit_v1
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_378
+  - momentum_504
+  - momentum_756
+
+normalize_kind: rank
+target_horizon: 5
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 6
+  min_train_days: 504
+
+models:
+  - id: zero_v1_momentum_elasticnet_baseline
+    class: ZeroPredictor
+    params: {}
+
+  - id: momentum_elasticnet_pit_v1
+    class: ElasticNetCrossSectional
+    params:
+      cv: 5
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true
+      # l1_ratios: null → default [0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]
+      # alphas: null → sklearn data-driven geometric grid (100 values)

@@ -1,0 +1,48 @@
+# Pure-momentum Lasso at 21-day target horizon.
+#
+# Same panel as momentum_lasso_pit.yaml; the only changes are
+# target_horizon: 21 and embargo_days: 22 to prevent label-overlap leakage.
+#
+# Why this matters separately from the 5-day version
+# ---------------------------------------------------
+# At 21-day horizon, the per-constituent IC differences narrow:
+#   mom_756: +0.0502, mom_504: +0.0472, mom_378: +0.0389, mom_12_1: +0.0286
+# A learned linear combination has more to work with — the second-best
+# constituent (mom_504) is much closer to the best (mom_756) than at 5-day.
+# L1 might give meaningful weight to multiple constituents rather than
+# collapsing to mom_756 alone.
+
+experiment_id: momentum_lasso_pit_h21
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_378
+  - momentum_504
+  - momentum_756
+
+normalize_kind: rank
+target_horizon: 21
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 22
+  min_train_days: 504
+
+models:
+  - id: zero_v1_momentum_lasso_baseline_h21
+    class: ZeroPredictor
+    params: {}
+
+  - id: momentum_lasso_pit_h21
+    class: LassoCrossSectional
+    params:
+      cv: 5
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true
