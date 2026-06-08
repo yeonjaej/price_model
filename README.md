@@ -470,58 +470,21 @@ Each entry carries a one-line comment identifying the corporate event and
 the rationale for inclusion. New entries are added when new failures are
 observed.
 
-### Sources of upward bias in the primary estimate
+### Sources of upward bias in the reported ICs
 
-The primary IC of +0.0183 should be interpreted with the following
-caveats.
+The headline IC of +0.0695 (21-day L1 regression on 2025+ OOS) and every other IC in the README — gross or net — should be interpreted with the following caveats. The bias sources are inherent to the data and methodology and apply uniformly across models, not to one model in isolation.
 
-1. **PIT correction is partial.** Because yfinance does not return data
-   for SIVB, FRC, ATVI, AGN, and similar delisted symbols, those tickers
-   do not appear in the PIT panel even when Wikipedia indicates they were
-   index members on the relevant dates. The PIT-corrected backtest
-   therefore still excludes the worst realized losers of the 2022-2023
-   banking crisis. A fully PIT-correct analysis using paid data (Norgate,
-   Polygon, or CRSP) would either misrank or correctly short SIVB at
-   −85% on 2023-03-08; the present model does neither.
-2. **The 61% bias estimate is a lower bound.** It reflects the share of
-   apparent edge attributable to selection *given the data available*.
-   The actual selection bias on a fully PIT-correct dataset (with
-   delisted history and complete pre-2014 membership) would be larger.
-   The IC drop from +0.0142 to +0.0055 on the 22-feature model is
-   therefore a floor on backtest inflation, not a ceiling. For reference,
-   the same effect on the original 13-feature technical-only baseline
-   was an 89% collapse (+0.0075 → +0.0008); weaker feature sets exhibit
-   higher survivorship-bias inflation.
-3. **The post-2022 regime contains the bank-failure period (March-May
-   2023).** The reported +0.0183 IC over 905 days post-October-2022 is
-   computed on a cross-section that excludes the tickers that
-   catastrophically failed in that window. A real-world model would
-   need to predict (or fail to predict) those failures; the present
-   model does not face that test. The accurate framing of the reported
-   IC is "+0.0183 on the survivors of the regime, given the available
-   data."
-4. **Transaction costs, taxes, and slippage are zero in the backtest.**
-   All ICs and Sharpes assume costless rebalancing. A retail investor
-   faces bid-ask spreads (~5-10 bp), commissions, capital-gains tax, and
-   slippage; the reported Sharpe of +0.86 is gross. After realistic
-   retail costs, the after-cost Sharpe on a 10-30 ticker portfolio
-   approaches zero. An institutional desk paying ~1-3 bp all-in could
-   plausibly net a Sharpe in the 0.4-0.6 range from this signal, which
-   would not constitute a standalone strategy.
-5. **Single evaluation window.** The 2017-2026 window was selected as
-   the range yfinance reliably covers. Alternative windows (2010-2020,
-   2017-2026, 2020-2026) would produce different deltas at each stage;
-   a multi-window robustness check has not been performed.
+1. **PIT correction is partial.** Because yfinance does not return data for SIVB, FRC, ATVI, AGN, and similar delisted symbols, those tickers do not appear in the PIT panel even when Wikipedia indicates they were index members on the relevant dates. The PIT-corrected backtest therefore still excludes the worst realized losers of the 2022-2023 banking crisis. A fully PIT-correct analysis using paid data (Norgate, Polygon, or CRSP) would either misrank or correctly short SIVB at −85% on 2023-03-08; the present model does neither. The headline +0.0695 IC is therefore an *upper bound* on what the same recipe would produce on a survivorship-bias-free dataset.
+2. **Survivorship-bias inflation depends on signal strength.** On the legacy v2 LightGBM ablation (still reproducible via `notebooks/00_reproduce_headline.ipynb`), turning PIT correction off raised full-sample IC from +0.0055 to +0.0142 — a **61% bias inflation** on a weak-signal model. On the same v2 panel, a chronologically earlier 13-feature technical-only baseline showed an **89% bias inflation** (+0.0008 → +0.0075). The general rule: bias inflation is larger when the underlying signal is weak. The headline L1 regression has a much stronger signal (+0.0695 vs the legacy v2 +0.0055), so the *relative* PIT-vs-no-PIT inflation is expected to be smaller in percentage terms — but the absolute IC drop on a fully PIT-correct dataset is still likely 0.002–0.010.
+3. **The 2025+ evaluation window is regime-concentrated.** The 16-month period 2025-01-02 → 2026-04-29 is characterized by Mag-7 dominance, multi-year momentum persistence, and AI-sector concentration. Long-horizon momentum factors and the L1 regression both benefit from this regime; their pre-2022 IC on the same recipes was much weaker. The reported headline therefore reflects "+0.0695 on a momentum-friendly regime, given the available data," not "+0.0695 across diverse regimes."
+4. **Transaction costs, taxes, and slippage are partially modeled.** Gross IC and gross Sharpe assume costless rebalancing. The net 20 bp Sharpe column in the headline table models bid-ask spread + commission at institutional levels (~3-20 bp per side), but it does not include slippage on illiquid names, capital-gains taxes, or short-borrow costs. A retail investor faces all four; an institutional desk paying ~1-3 bp all-in could plausibly net a Sharpe in the 0.6-0.8 range on the L1 regression and around +1.5 on `mom_756_factor_h21` — closer to deployable but still well below 1.0 after the unmodeled friction.
+5. **Single evaluation window.** The 2025-01-02 → 2026-04-29 OOS slice was selected as "data available since 2025 with full 21-day forward returns realized." Alternative windows (e.g., 2018–2020, 2020–2022, 2022–2024) would produce different ICs at each stage; the multi-window stress test described in the Discussion's synthesizing thesis is the most-needed extension of this work and has not been performed.
 
 ### Toward a fully PIT-correct evaluation
 
 Listed in approximate order of effort:
 
-- **Replace yfinance with Norgate Premium Data (~$60 / month)** for
-  survivorship-bias-free prices including delisted history. All five IC
-  numbers would change; the primary +0.0183 IC would likely fall by
-  0.002-0.005, but the regime-conditional shape (post-2022 strong,
-  pre-2022 negative) is expected to persist.
+- **Replace yfinance with Norgate Premium Data (~$60 / month)** for survivorship-bias-free prices including delisted history. All reported ICs would change; the headline +0.0695 IC would likely fall by 0.002-0.010, and the regime-conditional shape (post-2024 strong, pre-2022 weak) is expected to persist but compress.
 - **Replace the Wikipedia membership source with CRSP** (paid; free
   academic access for most affiliated researchers). Provides cleaner
   pre-2014 history and eliminates scrape fragility.
@@ -532,8 +495,8 @@ Listed in approximate order of effort:
 
 ## Scope and limitations
 
-- **Not deployable for retail trading.** After bid-ask spreads, commissions, and capital-gains taxes, even the headline L1 regression at +0.0697 IC and gross Sharpe +1.24 yields an after-cost edge that is meaningful only for institutional cost levels (~3 bp all-in). At retail cost levels (~10-30 bp per side once you include slippage and spread), and on the small portfolio sizes a retail account can hold, the after-cost edge approaches zero. The result is institutional-grade gross, not retail-grade net.
-- **The edge is regime-concentrated.** The 2025-01-02 → 2026-04-27 evaluation window covers a 16-month period characterized by Mag-7 dominance, multi-year momentum persistence, and AI-sector concentration. Long-horizon momentum factors and the L1 regression both benefit from this regime; their pre-2022 IC was much weaker. The structural ranking (linear-on-anomalies > momentum > ML) has not been verified across regime changes. A bull-to-bear or risk-on-to-risk-off transition could materially compress the L1-regression advantage or reverse the ML-vs-linear ranking.
+- **Not deployable for retail trading.** After bid-ask spreads, commissions, and capital-gains taxes, even the headline L1 regression at +0.0695 IC and gross Sharpe +1.24 yields an after-cost edge that is meaningful only for institutional cost levels (~3 bp all-in). At retail cost levels (~10-30 bp per side once you include slippage and spread), and on the small portfolio sizes a retail account can hold, the after-cost edge approaches zero. The result is institutional-grade gross, not retail-grade net.
+- **The edge is regime-concentrated.** The 2025-01-02 → 2026-04-29 evaluation window covers a 16-month period characterized by Mag-7 dominance, multi-year momentum persistence, and AI-sector concentration. Long-horizon momentum factors and the L1 regression both benefit from this regime; their pre-2022 IC was much weaker. The structural ranking (linear-on-anomalies > momentum > ML) has not been verified across regime changes. A bull-to-bear or risk-on-to-risk-off transition could materially compress the L1-regression advantage or reverse the ML-vs-linear ranking.
 - **Single evaluation period, no multi-window robustness.** All headline numbers are computed on one OOS window (2025+). A multi-window stress test — evaluating the same models on 2018-2020, 2020-2022, 2022-2024, and 2024-2026 in sequence — has not been performed. This is a known limitation that a paid-data version of the analysis would address.
 - **Survivorship-bias is only partially corrected.** The PIT correction excludes ~12% of historical S&P 500 members because yfinance does not return data for delisted symbols (SIVB, FRC, ATVI, AGN, etc.). The reported ICs are floors on the true edge a paid-data version would produce, not estimates of it. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations).
 - **Not a substitute for index funds.** For individual investors, decades of research show that low-cost diversified index funds outperform almost all active strategies after fees and taxes.
