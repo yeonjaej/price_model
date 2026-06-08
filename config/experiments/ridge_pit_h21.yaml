@@ -1,0 +1,61 @@
+# Ridge regression at 21-day target horizon — 21-day analogue of ridge_pit.yaml.
+#
+# Why this exists
+# ---------------
+# The headline 21-day apples-to-apples comparison reports a Ridge
+# regression IC. The original `ridge_pit.yaml` is trained at 5-day target,
+# which made the comparison "5-day-trained Ridge evaluated at 21-day
+# horizon" — not strictly apples-to-apples with the other 21-day-trained
+# headline models. This config trains Ridge specifically for the 21-day
+# target so the comparison is fully consistent.
+#
+# Same 12-feature panel as ridge_pit.yaml (the L1-vs-L2-vs-blend contrast
+# is the original purpose; this h21 variant is purely a horizon swap).
+# Same RidgeCV inner-CV protocol with the same 20-point log-spaced alpha
+# grid. Only target_horizon and embargo_days change.
+#
+# Walk-forward changes vs ridge_pit.yaml:
+#   target_horizon: 5 → 21
+#   embargo_days:   6 → 22  (target_horizon + 1)
+
+experiment_id: ridge_pit_h21
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  # IDENTICAL to ridge_pit.yaml
+  - momentum_504
+  - momentum_378
+  - momentum_12_1
+  - momentum_756
+  - vol_20
+  - vol_ewm_20
+  - parkinson_vol_20
+  - log_dollar_volume
+  - beta_60
+  - max_return_21d
+  - body_ratio
+  - range_ratio
+
+normalize_kind: zscore
+target_horizon: 21
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 22
+  min_train_days: 504
+
+models:
+  - id: zero_v1_ridge_baseline_h21
+    class: ZeroPredictor
+    params: {}
+
+  - id: ridge_pit_h21
+    class: RidgeCrossSectional
+    params:
+      cv: 5
+      fit_intercept: true
+      # alphas: null → 20-point log-spaced grid from 1e-4 to 1e4

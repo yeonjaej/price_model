@@ -57,6 +57,7 @@ MODEL_IDS = [
     "lasso_pit_v1",
     "lasso_pit_v2",
     "ridge_pit_v1",
+    "ridge_pit_h21",
     "lasso_elasso_pit_v1",
     # Pure-momentum linear blends: Lasso (L1) and ElasticNet (L1+L2) on
     # {mom_12_1, mom_378, mom_504, mom_756}.

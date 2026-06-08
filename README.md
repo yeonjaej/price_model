@@ -4,23 +4,21 @@ A point-in-time (PIT) corrected cross-sectional equity return predictor on the S
 
 ## Executive summary
 
-On the 2025-01-02 → 2026-04-27 out-of-sample slice (334 dates, all hyperparameters and coefficients selected strictly on data preceding this period), a **9-feature L1 cross-sectional regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) produces the strongest signal at the 21-day forward horizon: **IC = +0.0697 (t = +5.24), long-short Sharpe = +1.24**. The same framework applied at 5-day horizon scores IC = +0.0249 (t = +2.72); the README leads with the 21-day result because the linear-on-anomalies advantage is much sharper at the monthly horizon.
+On the 2025-01-02 → 2026-04-29 out-of-sample slice (336 dates, all hyperparameters and coefficients selected strictly on data preceding this period), a **9-feature L1 cross-sectional regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) produces the strongest signal at the 21-day forward horizon: **IC = +0.0695 (t = +5.25), long-short Sharpe = +1.24**. The same framework applied at 5-day horizon scores IC = +0.0249 (t = +2.72); the README leads with the 21-day result because the linear-on-anomalies advantage is much sharper at the monthly horizon.
 
-Headline 21-day comparison on the 2025-01-02 → 2026-04-27 OOS slice (334 dates):
+Headline 21-day comparison on the 2025-01-02 → 2026-04-29 OOS slice (336 dates):
 
 | Model | HP-selection | Gross IC | t-stat | Gross L/S Sharpe | Net 20 bp Sharpe |
 |---|---|---|---|---|---|
-| **L1 regression, 9-feature anomaly panel** | inner CV | **+0.0697** | **+5.24** | **+1.24** | +1.17 |
-| 36-month momentum factor | none | +0.0503 | +7.14 | +1.82 | **+1.80** |
-| 24-month momentum factor | none | +0.0510 | +6.31 | +1.40 | +1.39 |
-| 18-month momentum factor | none | +0.0423 | +4.96 | +1.35 | +1.33 |
-| JT 12-1 momentum (canonical) | none | +0.0312 | +3.51 | +1.04 | +1.02 |
-| Ridge regression, 12-feature panel † | inner CV | +0.0250 | +3.08 | +0.76 | +0.66 |
-| LightGBM, default HPs | none | +0.0278 | +4.35 | +0.75 | +0.63 |
-| LightGBM, held-out Optuna (≤ 2024-12-31) | held-out Optuna | +0.0191 | +3.02 | +0.75 | +0.61 |
-| Pure-momentum Lasso, 4 momentum features | inner CV | **−0.0185** | **−2.79** | −0.21 | −0.26 |
-
-† The 12-feature Ridge regression was trained at 5-day target horizon and evaluated at 21-day; the project does not include a 21-day-trained Ridge variant. The IC reported reflects "5-day-trained Ridge whose signal happens to persist at 21-day," not a Ridge model specifically fit for monthly horizon.
+| **L1 regression, 9-feature anomaly panel** | inner CV | **+0.0695** | **+5.25** | **+1.24** | +1.17 |
+| 24-month momentum factor | none | +0.0509 | +6.32 | +1.40 | +1.39 |
+| 36-month momentum factor | none | +0.0501 | +7.15 | +1.82 | **+1.81** |
+| Ridge regression, 12-feature panel | inner CV | +0.0430 | +4.32 | +1.02 | +0.98 |
+| 18-month momentum factor | none | +0.0421 | +4.97 | +1.35 | +1.34 |
+| JT 12-1 momentum (canonical) | none | +0.0311 | +3.51 | +1.04 | +1.02 |
+| LightGBM, default HPs | none | +0.0274 | +4.30 | +0.74 | +0.62 |
+| LightGBM, held-out Optuna (≤ 2024-12-31) | held-out Optuna | +0.0187 | +2.97 | +0.73 | +0.59 |
+| Pure-momentum Lasso, 4 momentum features | inner CV | **−0.0184** | **−2.79** | −0.21 | −0.26 |
 
 Two top-line observations from the table:
 
@@ -50,7 +48,7 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
 
   *Time-averaged IC.* The reported IC is the unweighted average of the
   per-date ICs across all evaluation dates (e.g., `n_dates = 334` for the
-  21-day headline OOS slice 2025-01-02 → 2026-04-27). A weak ranker on
+  21-day headline OOS slice 2025-01-02 → 2026-04-29). A weak ranker on
   most days plus one strong day does not produce a high IC; consistent
   ranking is required.
 
@@ -75,10 +73,10 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
   So the per-date IC on this hypothetical date is **+0.90**. Perfect
   ranking would give +1.0; perfect mis-ranking would give −1.0;
   independent ranking would give roughly 0. The reported headline 21-day
-  IC of +0.0697 is therefore the **average over 334 such daily
-  correlations** across the 2025-01-02 → 2026-04-27 OOS slice, each
+  IC of +0.0695 is therefore the **average over 336 such daily
+  correlations** across the 2025-01-02 → 2026-04-29 OOS slice, each
   computed across ~450 tickers. A per-date IC of +0.07 on average is
-  small in absolute terms but large in t-stat (+5.24) due to the high
+  small in absolute terms but large in t-stat (+5.25) due to the high
   date count — the consistency across days, not the magnitude on any
   one day, is what makes the signal credible.
 
@@ -269,7 +267,7 @@ Four sweeps (all evaluated on the 2025+ apples-to-apples slice):
 | HP-leaked baseline | 5-day | none — HPs saw all data | 100 | +0.02476 | +0.0046 |
 | Split A (held-out) | 5-day | ≤ 2023-12-31 | 100 | +0.01934 | +0.0015 |
 | Split B (held-out) | 5-day | ≤ 2024-12-31 | 100 | +0.01540 | +0.0080 |
-| 21-day held-out | 21-day | ≤ 2024-12-31 | 100 | +0.01709 | +0.0191 |
+| 21-day held-out | 21-day | ≤ 2024-12-31 | 100 | +0.01709 | +0.0187 |
 
 The chosen hyperparameters differ substantially across cutoffs (e.g., 5-day Split A picked `lambda_l1=1.79`, 21-day held-out picked `lambda_l1=0.10` with `lambda_l2=44.4` — 18× lower L1, 222× higher L2). CV mean IC computed inside Optuna's training window is not a reliable predictor of OOS IC; see [Discussion](#discussion) for analysis.
 
@@ -342,11 +340,11 @@ The conclusion is therefore "in this regime on this universe at this horizon, L1
 
 **Turnover dominates the gross-vs-net comparison.** The 36-month momentum factor has an annual turnover of 15× (it rebalances roughly twice per quarter). The L1 regression has 128× annual turnover (essentially full rebalancing every two days). LightGBM variants have 130–150× turnover. At 20 bp per side, the cost drag is:
 
-- 36-month momentum: 15 × 20 bp × 2 / 10000 = 0.6% annual drag → retains 99% of gross Sharpe.
-- L1 regression: 128 × 20 bp × 2 / 10000 = 5.1% annual drag → retains 84% of gross Sharpe.
-- LightGBM (default): 130 × 20 bp × 2 / 10000 = 5.2% annual drag → retains 84% of gross Sharpe.
+- 36-month momentum: 15 × 20 bp × 2 / 10000 = 0.6% annual drag → retains 99% of gross Sharpe (+1.82 → +1.81).
+- L1 regression: 128 × 20 bp × 2 / 10000 = 5.1% annual drag → retains 94% of gross Sharpe (+1.24 → +1.17).
+- LightGBM (default): 130 × 20 bp × 2 / 10000 = 5.2% annual drag → retains 84% of gross Sharpe (+0.74 → +0.62).
 
-The L1 regression's gross IC advantage of +0.020 over mom_756 translates to a gross-Sharpe deficit of −0.58 once both are turnover-adjusted. Net at 20 bp, mom_756 leads by +0.63 Sharpe.
+The L1 regression's gross IC advantage of +0.019 over mom_756 (+0.0695 vs +0.0501) translates to a gross-Sharpe deficit of −0.58 once both are turnover-adjusted. Net at 20 bp, mom_756 leads by +0.64 Sharpe.
 
 **Why the post-2024 regime amplifies the long-horizon advantage:** the Mag-7 megacap concentration and AI-sector winners-keep-winning pattern means multi-year leaders persist, so a 36-month momentum factor's holdings are stable across refits. In a regime with more frequent leadership rotation, the advantage would compress because mom_756's turnover would naturally rise. This is the cleanest regime-dependent finding in the project.
 
@@ -359,7 +357,7 @@ This is exactly the **DeMiguel-Garlappi-Uppal (2009)** result generalized: they 
 - **Default HPs are like 1/N.** They don't fit training data as hard, so they generalize better.
 - **Optuna-selected HPs are like Markowitz weights.** They minimize a training-period objective but inherit the estimation error.
 
-The 21-day result is the cleanest demonstration: held-out Optuna at 21-day target scored OOS IC +0.0191 vs default HPs' +0.0278. Even with the deployment slice strictly excluded from HP selection, the chosen HPs underperformed defaults by 0.009 IC.
+The 21-day result is the cleanest demonstration: held-out Optuna at 21-day target scored OOS IC +0.0187 vs default HPs' +0.0274. Even with the deployment slice strictly excluded from HP selection, the chosen HPs underperformed defaults by ~0.009 IC.
 
 **Practical implication:** an Optuna-tuned model should not be deployed without first verifying its OOS IC exceeds the default-HP OOS IC on a slice the HPs never saw. In this study, that verification step would have rejected the 21-day Optuna result entirely.
 
@@ -375,7 +373,7 @@ The mechanism is **L1 cancellation on collinear features**, with a twist documen
 
 ElasticNet does not help because the L2 component cannot stabilize the unstable L1 subspace at the CV-selected α magnitude.
 
-The positive corollary: **L1 regularization is not a free lunch on factor zoos.** The Han-He-Rapach-Zhou (2024) paper's substantive contribution is the *panel-curation principle* (one feature per economic family), not the choice of regularization. This project's results confirm that empirically — the curated 9-feature panel produces +0.0697 IC; the same regularization on a single-family panel produces −0.019 IC. **Feature-panel design matters more than regularization choice.**
+The positive corollary: **L1 regularization is not a free lunch on factor zoos.** The Han-He-Rapach-Zhou (2024) paper's substantive contribution is the *panel-curation principle* (one feature per economic family), not the choice of regularization. This project's results confirm that empirically — the curated 9-feature panel produces +0.0695 IC; the same regularization on a single-family panel produces −0.018 IC. **Feature-panel design matters more than regularization choice.**
 
 ### Synthesizing thesis
 

@@ -62,10 +62,13 @@ MODEL_IDS = [
     "residual_reversal_5d_factor",
     "sector_relative_reversal_5d_factor",
     "amihud_illiquidity_factor",
-    # Linear (lasso_pit_v1, lasso_pit_v2, and the L2 alternative ridge_pit_v1)
+    # Linear (lasso_pit_v1, lasso_pit_v2, and the L2 alternative ridge_pit_v1).
+    # ridge_pit_h21 is the 21-day-trained Ridge counterpart for fair
+    # apples-to-apples comparison at 21-day target horizon.
     "lasso_pit_v1",
     "lasso_pit_v2",
     "ridge_pit_v1",
+    "ridge_pit_h21",
     # ML (extended_kaggle_v2_ohlcv + the pared variant + audit-curated v3 +
     # Optuna-tuned LightGBM + XGBoost + CatBoost on v3 panel +
     # the held-out HP-free version of the tuned LightGBM where Optuna only
