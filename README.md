@@ -275,7 +275,7 @@ Four sweeps (all evaluated on the 2025+ apples-to-apples slice):
 | Split B (held-out) | 5-day | ≤ 2024-12-31 | 100 | +0.01540 | +0.0080 |
 | 21-day held-out | 21-day | ≤ 2024-12-31 | 100 | +0.01709 | +0.0187 |
 
-The chosen hyperparameters differ substantially across cutoffs (e.g., 5-day Split A picked `lambda_l1=1.79`, 21-day held-out picked `lambda_l1=0.10` with `lambda_l2=44.4` — 18× lower L1, 222× higher L2). CV mean IC computed inside Optuna's training window is not a reliable predictor of OOS IC; see [Discussion](#discussion) for analysis.
+The chosen hyperparameters differ substantially across cutoffs. The HP-leaked baseline picked `lambda_l1=1.79, lambda_l2=0.20`; Split A (≤2023) picked `lambda_l1=0.014, lambda_l2=33.07`; Split B (≤2024) picked `lambda_l1=5.43, lambda_l2=0.13`; 21-day held-out picked `lambda_l1=0.10, lambda_l2=44.4`. The same Optuna sweep on the same panel produces L1 regularization values ranging across two orders of magnitude depending solely on the training cutoff — the empirical signature of regime-dependent HP optimization. CV mean IC computed inside Optuna's training window is not a reliable predictor of OOS IC; see [Discussion](#discussion) and [`notebooks/06_hp_selection_bias.ipynb`](notebooks/06_hp_selection_bias.ipynb) for the visualization.
 
 ### 9-feature anomaly panel (headline L1 regression)
 
@@ -524,10 +524,15 @@ notebooks/               # diagnostic + classical + robustness + portfolio + fea
 tests/                   # leakage tests, PIT tests, ticker tests, contract tests
 ```
 
-Notebooks of note:
+Notebooks (each maps to one or more README sections; together they provide interactive support for the project's claims):
 
-- `notebooks/04_portfolio_attribution.ipynb` — uses the Ken French adapter directly (not the model layer) to decompose a 10-stock equal-weight portfolio's exposures and attribute realized returns to factors. Independent application of the data layer; does not depend on the predictive model.
-- `notebooks/05_feature_exploration.ipynb` — boilerplate for understanding the project's 41 registered features and adding new ones. Covers feature distributions, cross-sectional dispersion over time, the pairwise correlation matrix on the headline 9-feature panel, fitted L1 regression coefficients, LightGBM gain importance, and a step-by-step template for adding a new feature.
+- `notebooks/00_reproduce_headline.ipynb` — PIT ablation study on the legacy v2 LightGBM panel. Quantifies survivorship-bias inflation (61–89% depending on feature-set strength). Supports Methodology + Data quality.
+- `notebooks/01_diagnostics.ipynb` — Stored-prediction diagnostics on the headline 21-day models: apples-to-apples comparison, rolling 60-day IC, regime-conditional IC, net-of-cost gross-vs-net Sharpe with turnover annotation. Supports Discussion Claims 1 (net-of-cost inversion), 2 (regime fragility), and Methodology.
+- `notebooks/02_classical_timeseries.ipynb` — Classical EMH baselines (ARIMA / GARCH / GBM) on the per-ticker time series, contrasted with the cross-sectional L1 regression. Supports Discussion Claim 1 (why cross-sectional methods beat univariate).
+- `notebooks/03_robustness.ipynb` — Bootstrap CI / decile bucket monotonicity / time-split partition on the L1 regression headline. Supports Methodology (deflated-Sharpe-adjacent rigor).
+- `notebooks/04_portfolio_attribution.ipynb` — Ken French 5-factor risk decomposition + return attribution on a real portfolio. Independent of the predictive model; demonstrates the factor infrastructure.
+- `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Supports Methodology (panel design) + Discussion Claim 3 (L1 stability).
+- `notebooks/06_hp_selection_bias.ipynb` — Visualizes the held-out Optuna sweeps documented in the README's Methodology Optuna-sweep table. Shows the chosen HPs across cutoffs (lambda_l1 varies 390× across Split A vs Split B), OOS IC bar chart, and the held-out-vs-default inversion at 21-day. Supports Discussion Claim 2.
 
 ### Streamlit dashboard
 
