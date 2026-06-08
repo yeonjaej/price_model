@@ -139,7 +139,13 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
 ### Step 0 — install and build the PIT universe (one-time, ~10-15 min cold)
 
 ```bash
+# Core: required for everything below.
 pip install -e ".[dev,classical]"
+
+# Optional: notebook visualization stack (matplotlib + seaborn + jupyter).
+# Install if you plan to run the notebooks/ directory, including the
+# feature-exploration boilerplate at notebooks/05_feature_exploration.ipynb.
+pip install -e ".[notebooks]"
 
 # Scrape Wikipedia for historical S&P 500 membership and write the universe file
 python -m price_model.cli build-universe --name sp500_pit --start 2017-01-01

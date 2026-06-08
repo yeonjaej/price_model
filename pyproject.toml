@@ -45,6 +45,16 @@ classical = [
     "statsmodels>=0.14",
     "arch>=7.0",
 ]
+notebooks = [
+    # Visualization stack for the Jupyter notebooks under notebooks/.
+    # Not required by the core library or tests; install only if you plan
+    # to run the notebooks. Matplotlib is the primary plotting library;
+    # seaborn provides correlation-heatmap and theme helpers used by
+    # notebooks/05_feature_exploration.ipynb.
+    "matplotlib>=3.7",
+    "seaborn>=0.13",
+    "jupyter>=1.0",
+]
 
 [project.scripts]
 price-model = "price_model.cli:app"
