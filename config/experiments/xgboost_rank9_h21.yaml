@@ -18,7 +18,12 @@ features:
   - beta_60
 normalize_kind: rank
 target_horizon: 21
-walk_forward: {refit_freq_days: 21, embargo_days: 22, min_train_days: 504}
+walk_forward:  # regime-confined (this branch): single refit on bull regime, test 2025+
+  refit_freq_days: 9999
+  embargo_days: 33          # calendar; covers the 21 trading-day (~31 cal) horizon
+  min_train_days: 504       # ignored when first_refit is set
+  train_start: 2022-10-10   # all panels train on rows >= regime start, identically
+  first_refit: 2025-01-02   # single refit -> train [2022-10-10, 2024-11-30], test 2025+
 models:
   - {id: zero_v1_rank9_xgb_baseline_h21, class: ZeroPredictor, params: {}}
   - id: xgboost_rank9_h21

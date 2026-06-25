@@ -31,15 +31,15 @@ models:
 - id: lightgbm_kaggle_v3_curated_h21_hp_pre20241231
   class: LightGBMModel
   params:
-    learning_rate: 0.09738100140380881
-    num_leaves: 80
-    min_data_in_leaf: 469
-    feature_fraction: 0.9162804687041095
-    bagging_fraction: 0.9446756637145418
+    learning_rate: 0.010015498968867335
+    num_leaves: 79
+    min_data_in_leaf: 342
+    feature_fraction: 0.911230559790089
+    bagging_fraction: 0.9136967443660846
     bagging_freq: 5
-    lambda_l1: 0.10308584061165488
-    lambda_l2: 44.41729352475883
-    n_estimators: 519
+    lambda_l1: 4.780916943183211
+    lambda_l2: 30.645231252626797
+    n_estimators: 1092
     val_fraction: 0.1
     early_stopping_rounds: 100
     seeds:

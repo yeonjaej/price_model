@@ -49,9 +49,15 @@ normalize_kind: rank
 target_horizon: 21
 
 walk_forward:
-  refit_freq_days: 252
-  embargo_days: 22
-  min_train_days: 504
+  # Regime-confined: one refit trained on the bull regime only, test 2025+.
+  # train_start (harness param) confines training rows to >= 2022-10-10 across
+  # all panels regardless of warmup; min_train_days lands the single refit at
+  # ~2025-01-02 (panel start 2017-01-03 + 2921d); refit_freq 9999 => one block.
+  refit_freq_days: 9999
+  embargo_days: 33          # calendar; covers the 21 trading-day (~31 cal) horizon
+  min_train_days: 504       # ignored when first_refit is set
+  train_start: 2022-10-10   # all panels train on rows >= regime start, identically
+  first_refit: 2025-01-02   # single refit -> train [2022-10-10, 2024-11-30], test 2025+
 
 models:
   - id: zero_v1_curated6_baseline_h21
