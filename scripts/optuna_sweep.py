@@ -278,8 +278,10 @@ def main() -> None:
     # sweep's folds match the regime-confined CLI training window across panels.
     ts_cfg = cfg.get("walk_forward", {}).get("train_start")
     if ts_cfg:
+        # YAML may parse a bare date as a datetime.date already; accept str or date.
+        ts = ts_cfg if isinstance(ts_cfg, date) else date.fromisoformat(ts_cfg)
         before = matrix.height
-        matrix = matrix.filter(pl.col("date") >= date.fromisoformat(ts_cfg))
+        matrix = matrix.filter(pl.col("date") >= ts)
         console.print(
             f"[bold yellow]Regime lower bound[/bold yellow]: restricted to "
             f"dates >= {ts_cfg}: {matrix.height:,} rows "

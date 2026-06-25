@@ -97,13 +97,17 @@ def run_experiment(
 
     # Optional regime lower bound: confine training rows to `date >= train_start`
     # across all panels regardless of warmup length (e.g. single-regime backtests).
-    ts_cfg = cfg["walk_forward"].get("train_start")
-    train_start = date.fromisoformat(ts_cfg) if ts_cfg else None
+    # YAML parses a bare `2022-10-10` into a datetime.date already; accept str or date.
+    def _as_date(v: object) -> date | None:
+        if not v:
+            return None
+        return v if isinstance(v, date) else date.fromisoformat(str(v))
+
+    train_start = _as_date(cfg["walk_forward"].get("train_start"))
     # Optional absolute first-refit date: pins the train/test boundary independent
     # of each panel's warmup length (warmup-end varies, so min_train_days alone
     # cannot align panels). When set, min_train_days is ignored for refit timing.
-    fr_cfg = cfg["walk_forward"].get("first_refit")
-    first_refit = date.fromisoformat(fr_cfg) if fr_cfg else None
+    first_refit = _as_date(cfg["walk_forward"].get("first_refit"))
 
     store = PredictionStore()
     try:
