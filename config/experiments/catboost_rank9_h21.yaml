@@ -1,0 +1,34 @@
+# CatBoost on the 9-feature RANK anomaly panel (the linear headline's family).
+# Companion to extended_kaggle_v3_catboost_h21 (14-feature zscore): lets the
+# headline pick CatBoost's BETTER panel under held-out Optuna.
+#   python scripts/optuna_sweep.py --experiment catboost_rank9_h21 \
+#       --n-trials <N> --n-folds 4 --embargo-days 22 --max-date 2024-12-31 --write-tuned
+
+experiment_id: catboost_rank9_h21
+data: {universe: sp500_pit, start: 2017-01-01, pit_filter: true}
+features:
+  - momentum_12_1
+  - momentum_756
+  - return_1d
+  - vol_ewm_20
+  - idio_vol_20
+  - max_return_21d
+  - distance_52w_high
+  - log_dollar_volume
+  - beta_60
+normalize_kind: rank
+target_horizon: 21
+walk_forward: {refit_freq_days: 21, embargo_days: 22, min_train_days: 504}
+models:
+  - {id: zero_v1_rank9_cat_baseline_h21, class: ZeroPredictor, params: {}}
+  - id: catboost_rank9_h21
+    class: CatBoostModel
+    params:
+      learning_rate: 0.05
+      depth: 6
+      l2_leaf_reg: 5.0
+      rsm: 0.8
+      subsample: 0.8
+      bootstrap_type: Bernoulli
+      n_estimators: 500
+      seeds: [42, 2024, 12345]
