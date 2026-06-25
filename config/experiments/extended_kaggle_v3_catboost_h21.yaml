@@ -1,0 +1,57 @@
+# 21-day-horizon variant of extended_kaggle_v3_catboost.
+# Same 14-feature v3 panel and harness; only target_horizon (5 -> 21) and
+# embargo_days (6 -> 22) change. Base HPs here are Kaggle-reasonable defaults;
+# the headline comparison uses the held-out Optuna sweep (see README Step 1):
+#   python scripts/optuna_sweep.py --experiment extended_kaggle_v3_catboost_h21 \
+#       --n-trials <N> --n-folds 4 --embargo-days 22 --max-date 2024-12-31 --write-tuned
+# which writes extended_kaggle_v3_catboost_h21_hp_pre20241231.yaml.
+
+experiment_id: extended_kaggle_v3_catboost_h21
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - abnormal_volume
+  - distance_52w_high
+  - mom60_minus_dist_ma200
+  - return_5d
+  - max_return_21d
+  - momentum_12_1
+  - rsi_14
+  - log_dollar_volume
+  - vol_ewm_20
+  - momentum_60_rank
+  - cs_return_dispersion_20
+  - sector_relative_return_5d
+  - momentum_504
+  - beta_60
+
+normalize_kind: zscore
+target_horizon: 21
+
+walk_forward:
+  refit_freq_days: 21
+  embargo_days: 22
+  min_train_days: 504
+
+models:
+  - id: zero_v1_v3_catboost_baseline_h21
+    class: ZeroPredictor
+    params: {}
+
+  - id: catboost_v3_curated_h21
+    class: CatBoostModel
+    params:
+      learning_rate: 0.05
+      depth: 6
+      l2_leaf_reg: 5.0
+      rsm: 0.8
+      subsample: 0.8
+      bootstrap_type: Bernoulli
+      n_estimators: 500
+      val_fraction: 0.10
+      early_stopping_rounds: 50
+      seeds: [42, 2024, 12345]
