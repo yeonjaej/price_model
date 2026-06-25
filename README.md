@@ -293,7 +293,16 @@ The headline result `lasso_elasso_pit_h21` uses a 9-feature panel curated on the
 | 8 | `log_dollar_volume` | Size / liquidity | Amihud 2002 |
 | 9 | `beta_60` | Market exposure control (BAB-adjacent) | Frazzini-Pedersen 2014 |
 
-The 9 features were chosen ex-ante to span economically distinct mechanisms. Pairwise correlations within the panel are typically below 0.3 (verified empirically), satisfying the L1-stability prerequisite. Each feature is **rank-normalized within each date** (cross-sectional rank, then scaled to `[0, 1]`) — robust to fat tails, matches the asset-pricing literature convention, and prevents any single outlier observation from dominating the regression. The curation principle follows Han-He-Rapach-Zhou (2024).
+The 9 features were chosen ex-ante to span economically distinct mechanisms. Each feature is **rank-normalized within each date** (cross-sectional rank, then scaled to `[0, 1]`) — robust to fat tails, matches the asset-pricing literature convention, and prevents any single outlier observation from dominating the regression. The curation principle follows Han-He-Rapach-Zhou (2024).
+
+**Collinearity is partial, not absent.** The empirical pairwise-correlation matrix (Spearman, rank-normalized panel; computed in [`notebooks/05_feature_exploration.ipynb`](notebooks/05_feature_exploration.ipynb)) shows two correlated clusters rather than a near-orthogonal panel:
+
+- a **volatility/risk cluster** — `vol_ewm_20 ↔ idio_vol_20` = +0.79, `vol_ewm_20 ↔ max_return_21d` = +0.72, `vol_ewm_20 ↔ beta_60` = +0.61, `idio_vol_20 ↔ max_return_21d` = +0.62 (note features 4 and 5 are both Ang-Hodrick-Xing-Zhang 2006 — the same low-volatility family, so the "one feature per family" principle is not fully satisfied here);
+- a **trend cluster** — `momentum_12_1 ↔ distance_52w_high` = +0.58, `momentum_12_1 ↔ momentum_756` = +0.52, `momentum_756 ↔ distance_52w_high` = +0.46.
+
+The remaining ~25 of 36 pairs are below |0.3|, but the volatility cluster (0.6–0.79) sits inside the same danger band that produces L1 cancellation on the pure-momentum panel (0.75–0.82; see [Pure-momentum Lasso cancellation diagnostic](#pure-momentum-lasso-cancellation-diagnostic)), and would be flagged by the project's own redundancy auditor (`scripts/audit_lightgbm_features.py`, |corr| > 0.7).
+
+How the headline Lasso actually handles this cluster is regime-dependent (reproduce with `scripts/inspect_headline_lasso_coefficients.py`): in the 2021–2024 refits L1 zeros most of the cluster (benign sparsity), but in the 2024-11 → 2026-03 refits that generate the headline 2025+ predictions, `vol_ewm_20` and `idio_vol_20` take **large opposite-sign coefficients** (e.g. +0.014 / −0.012), an ~85%-cancellation signature on the two most collinear features. The +0.0695 IC survives only because the cluster is 4 of 9 features and the momentum/reversal/liquidity features carry the dominant, stable signal — **not** because the panel meets a clean low-collinearity prerequisite. Feature-panel design still matters more than the regularizer (see [Discussion](#why-pure-momentum-l1-produces-statistically-significant-negative-ic)), but the headline panel is "mostly low-correlation with one genuinely collinear vol cluster," not near-orthogonal.
 
 ### Net-of-cost decomposition
 
@@ -537,9 +546,12 @@ Notebooks (each maps to one or more README sections; together they provide inter
 - `notebooks/01_prediction_diagnostics.ipynb` — Stored-prediction diagnostics on the headline 21-day models: apples-to-apples comparison, rolling 60-day IC, regime-conditional IC, net-of-cost gross-vs-net Sharpe with turnover annotation. Supports Discussion Claims 1 (net-of-cost inversion), 2 (regime fragility), and Methodology.
 - `notebooks/02_classical_timeseries.ipynb` — Classical EMH baselines (ARIMA / GARCH / GBM) on the per-ticker time series, contrasted with the cross-sectional L1 regression. Supports Discussion Claim 1 (why cross-sectional methods beat univariate).
 - `notebooks/03_headline_robustness.ipynb` — Bootstrap CI / decile bucket monotonicity / time-split partition on the L1 regression headline. Supports Methodology (deflated-Sharpe-adjacent rigor).
-- `notebooks/04_portfolio_attribution.ipynb` — Ken French 5-factor risk decomposition + return attribution on a real portfolio. Independent of the predictive model; demonstrates the factor infrastructure.
 - `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Supports Methodology (panel design) + Discussion Claim 3 (L1 stability).
 - `notebooks/06_hp_selection_bias.ipynb` — Visualizes the held-out Optuna sweeps documented in the README's Methodology Optuna-sweep table. Shows the chosen HPs across cutoffs (lambda_l1 varies 390× across Split A vs Split B), OOS IC bar chart, and the held-out-vs-default inversion at 21-day. Supports Discussion Claim 2.
+
+**Extras (independent of the cross-sectional ML narrative):**
+
+- `notebooks/07_portfolio_attribution.ipynb` — Fama-French 5-factor risk decomposition + realized return attribution on a fixed portfolio. Reuses the project's FF5 data adapter and rolling-beta features for an orthogonal use case (portfolio risk, not return prediction). Independent application; the numbering jumps to 07 to signal scope drift from notebooks 00-06.
 
 ### Streamlit dashboard
 
