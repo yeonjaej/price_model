@@ -24,6 +24,7 @@ Two top-line observations from the table:
 
 - **Gross-IC ranking favors the L1 regression**; net 20 bp Sharpe favors the 36-month momentum factor (+1.80 vs +1.17), driven by an 8× turnover differential.
 - **Every tested ML variant trails both** the L1 regression and the long-horizon momentum factors on both gross IC and net Sharpe.
+- **Follow-up caveat:** the "L1 vs Ridge" gap above is panel-confounded — on a *matched* panel and grader, L1 ≈ L2, and pruning the 9-feature panel to 6 raises OOS IC further (to ~+0.088 in-regime). See [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
 
 For the technical setup (PIT correction, walk-forward training with embargo, inner CV for regularization-strength selection, held-out Optuna, deflated Sharpe), see [Methodology](#methodology). For analysis of why ML fell short, why long-horizon momentum wins net-of-cost, and the regime fragility of hyperparameter optimization, see [Discussion](#discussion).
 
@@ -52,37 +53,16 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
   most days plus one strong day does not produce a high IC; consistent
   ranking is required.
 
-  *Worked example.* On a hypothetical date with `N_t = 5` tickers,
-  suppose the model's predictions and the realized 5-day forward excess
-  returns are:
+  *Worked example.* For 5 tickers with prediction ranks `[5,4,3,2,1]` and
+  realized-return ranks `[5,3,4,2,1]` (one adjacent swap),
+  `ρ = 1 − 6·Σd²/(N(N²−1)) = 1 − 12/120 = +0.90`. The headline IC of
+  +0.0695 is the **average of 336 such daily correlations** (each over ~450
+  tickers). Small per day, but large in t-stat (+5.25) thanks to the date
+  count — *consistency* across days, not magnitude on any one day, is what
+  makes it credible.
 
-  | Ticker | Prediction | Pred rank | Realized | Realized rank |
-  |---|---|---|---|---|
-  | AAA | +0.020 | 5 | +0.030 | 5 |
-  | BBB | +0.010 | 4 | +0.005 | 3 |
-  | CCC | +0.000 | 3 | +0.012 | 4 |
-  | DDD | −0.005 | 2 | −0.001 | 2 |
-  | EEE | −0.015 | 1 | −0.020 | 1 |
-
-  The rank vectors are `[5, 4, 3, 2, 1]` and `[5, 3, 4, 2, 1]`. The
-  Spearman correlation (Pearson correlation of ranks) is:
-
-  `ρ = 1 − (6 × Σ d²) / (N × (N² − 1))`
-  ` = 1 − (6 × (0² + 1² + 1² + 0² + 0²)) / (5 × 24) = 1 − 12/120 = 0.90`
-
-  So the per-date IC on this hypothetical date is **+0.90**. Perfect
-  ranking would give +1.0; perfect mis-ranking would give −1.0;
-  independent ranking would give roughly 0. The reported headline 21-day
-  IC of +0.0695 is therefore the **average over 336 such daily
-  correlations** across the 2025-01-02 → 2026-04-29 OOS slice, each
-  computed across ~450 tickers. A per-date IC of +0.07 on average is
-  small in absolute terms but large in t-stat (+5.25) due to the high
-  date count — the consistency across days, not the magnitude on any
-  one day, is what makes the signal credible.
-
-  *Interpretation benchmarks.* On liquid US large-caps, IC = +0.02 with
-  t-stat > 2 is considered a credible edge. IC ≈ +0.10 would be
-  exceptional; IC > +0.20 is not realistic out-of-sample.
+  *Benchmarks.* On liquid US large-caps, IC = +0.02 (t > 2) is a credible
+  edge; +0.10 would be exceptional; > +0.20 is not realistic out-of-sample.
 
 - **t-stat of IC.** `mean(per-date IC) / (stdev(per-date IC) / √n_dates)`.
   Tests whether the mean IC is distinguishable from zero against the
@@ -242,11 +222,11 @@ The forecast target is the cross-sectional excess log-return over a fixed horizo
 
 - `min_train_days = 504` — first prediction date is approximately 2 years after panel start (warmup period).
 - `refit_freq_days = 252` (linear and momentum models) or `21` (LightGBM) — annual or monthly refit cadence.
-- `embargo_days = H + 1` — 6 days for 5-day target, 22 days for 21-day target. The embargo ensures the last training label (which depends on dates `t+1` through `t+H`) does not overlap with the first validation prediction.
+- `embargo_days` — set to 6 (5-day target) and 22 (21-day target). **Caveat (unit mismatch):** `embargo_days` is in *calendar* days while the horizon is in *trading* days, so a 21-trading-day target (≈ 31 calendar days) is not fully covered by a 22-calendar-day embargo. The last ~6 trading days of each training block therefore have label windows that bleed ~1 week into the test window — a small boundary leak, not enough to overturn the headline, but a genuine error to fix (a fully airtight embargo is ~31 calendar days at 21-day horizon).
 
-For the 21-day headline result, the walk-forward harness produces 8 refits across the 2017→2026 panel. Predictions in 2025-01 → 2026-01 use weights from a refit whose training data ended in late 2024 (causally OOS for 2025+ dates); predictions in early 2026 → 2026-04 use weights from a refit whose training data ended in late 2025.
+For the 21-day headline result, the walk-forward harness produces 8 refits across the 2017→2026 panel. Predictions in 2025+ use weights from a refit whose training data ended in late 2024 (causally OOS for 2025+ dates).
 
-**Lookahead safety** is verified by the "truncation-invariance" leakage test in `tests/test_leakage.py`: the prediction at date `t` must be unchanged when the entire panel is truncated to dates `≤ t`. Every feature and every model is exercised against this test in CI.
+**Feature lookahead safety** is verified by the truncation-invariance test in `tests/test_no_leakage.py`: each registered *feature*'s value at date `t` must be unchanged when the panel is truncated to dates `≤ t`. The test is parametrized over `FEATURE_REGISTRY` and runs in CI. Note it covers features only — *target* leakage across the train/test boundary is the embargo's job (see the caveat above), not this test's.
 
 ### Inner cross-validation for regularization-strength selection
 
@@ -256,9 +236,9 @@ For the L1 (Lasso), L2 (Ridge), and L1+L2 (ElasticNet) cross-sectional models, t
 - `RidgeCV` (sklearn): 20-point log-spaced grid over α (project override of sklearn default which is too coarse), 5-fold CV, generalized CV.
 - `ElasticNetCV` (sklearn): joint search over α and l1_ratio (default grid `[0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]`), 5-fold CV.
 
-The CV splits are random within the training window (sklearn default). No user-specified α; sklearn picks a data-appropriate grid. This means the L1 regression has **no user-tunable hyperparameters at deployment time** — α is fully data-driven per refit. The surviving non-zero coefficients are themselves an empirical finding interpretable in factor-zoo terms.
+**What the inner CV folds actually are (correction to an earlier claim that they are "random"):** `LassoCV`/`RidgeCV` with an integer `cv` use `KFold(shuffle=False)` — contiguous row blocks, not random. Because the panel is sorted `["ticker","date"]` for feature correctness, those contiguous blocks fall on ticker boundaries, so the inner CV is effectively a **by-ticker group split with full date overlap** (verified empirically: every validation date also appears in the training folds). It is therefore **non-temporal** — it scores how an α generalizes across *unseen tickers in the same period*, not across *time* — and it is **MSE-scored**, not IC-scored. This is a lenient grader relative to the purged forward-chain used for the trees (below); within a single stable regime the two agree (both pick near-zero shrinkage), but across a regime break a temporally-honest α-selection shrinks the linear model to the null. See [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
 
-The walk-forward, inner-CV combination means each refit's α is selected on data the deployment slice has never seen.
+The walk-forward outer loop still guarantees each refit's α is selected only on data preceding the deployment slice; the inner-CV structure affects *how* α is chosen, not whether the OOS predictions are causal.
 
 ### Held-out Optuna protocol for LightGBM hyperparameter search
 
@@ -302,7 +282,7 @@ The 9 features were chosen ex-ante to span economically distinct mechanisms. Eac
 
 The remaining ~25 of 36 pairs are below |0.3|, but the volatility cluster (0.6–0.79) sits inside the same danger band that produces L1 cancellation on the pure-momentum panel (0.75–0.82; see [Pure-momentum Lasso cancellation diagnostic](#pure-momentum-lasso-cancellation-diagnostic)), and would be flagged by the project's own redundancy auditor (`scripts/audit_lightgbm_features.py`, |corr| > 0.7).
 
-How the headline Lasso actually handles this cluster is regime-dependent (reproduce with `scripts/inspect_headline_lasso_coefficients.py`): in the 2021–2024 refits L1 zeros most of the cluster (benign sparsity), but in the 2024-11 → 2026-03 refits that generate the headline 2025+ predictions, `vol_ewm_20` and `idio_vol_20` take **large opposite-sign coefficients** (e.g. +0.014 / −0.012), an ~85%-cancellation signature on the two most collinear features. The +0.0695 IC survives only because the cluster is 4 of 9 features and the momentum/reversal/liquidity features carry the dominant, stable signal — **not** because the panel meets a clean low-collinearity prerequisite. Feature-panel design still matters more than the regularizer (see [Discussion](#why-pure-momentum-l1-produces-statistically-significant-negative-ic)), but the headline panel is "mostly low-correlation with one genuinely collinear vol cluster," not near-orthogonal.
+On this panel, `vol_ewm_20` and `idio_vol_20` (the 0.79 pair) take **large opposite-sign coefficients** (≈ +0.014 / −0.012) in the 2025+ refits. This *looks* like the L1 cancellation failure mode — but it is not. **Ridge, which has no cancellation mechanism, reproduces the same opposite signs** (≈ +0.011 / −0.019; see [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader)). The signs are the direction the *data* wants: the model is loading on `vol_ewm − idio_vol ≈ systematic (factor) volatility` — a real spread, not an artifact. (Contrast the pure-momentum panel below, where the features are *truly* redundant and the cancellation *is* pathological.) So the headline panel is "mostly low-correlation with one genuinely collinear vol cluster that both L1 and L2 resolve into a signal-bearing spread," not near-orthogonal — and feature-panel design matters more than the regularizer.
 
 ### Net-of-cost decomposition
 
@@ -391,6 +371,17 @@ The mechanism is **L1 cancellation on collinear features**, with a twist documen
 ElasticNet does not help because the L2 component cannot stabilize the unstable L1 subspace at the CV-selected α magnitude.
 
 The positive corollary: **L1 regularization is not a free lunch on factor zoos.** The Han-He-Rapach-Zhou (2024) paper's substantive contribution is the *panel-curation principle* (one feature per economic family), not the choice of regularization. This project's results confirm that empirically — the curated 9-feature panel produces +0.0695 IC; the same regularization on a single-family panel produces −0.018 IC. **Feature-panel design matters more than regularization choice.**
+
+### Matched-grader comparison: is it the model, the panel, or the grader?
+
+The headline "L1 beats every ML variant" is confounded: the Lasso's α was chosen by the lenient non-temporal MSE-scored inner CV (above), while the trees' HPs were chosen by the strict purged forward-chain IC-scored Optuna. To remove the confound, every model was re-run under the **same** purged-forward-chain IC grader, on the **same** split, confined to the bullish regime (train 2022-10-10 → 2024-11-29, test 2025-01-02 → 2026-05-22). Reproduce with `scripts/matched_grader_comparison.py`, `scripts/spectrum_comparison.py`, and `scripts/vol_ablation_lasso_ridge.py`. Findings:
+
+1. **L1 ≈ L2 — the regularizer is a coin flip.** On a matched panel and grader, Lasso and Ridge tie to four decimals (e.g. +0.0772 vs +0.0769 on the 9-feature panel). The headline table's "L1 +0.0695 vs Ridge +0.0430" gap is *panel*-driven (different 9- vs 12-feature panels), not an L1-over-L2 effect. The headline could equally be titled Ridge.
+2. **Linear still beats trees — even on the trees' own panel.** Under the identical strict grader, the 9-feature linear models score ~+0.077 vs LightGBM's +0.0525; on the 14-feature *engineered* tree panel every model is *worse* (linear ~+0.056, LightGBM +0.0403). So the linear advantage is not an artifact of giving trees a linear-optimized panel. The signal is near-linear; trees over-parameterize it.
+3. **Panel design dominates, and the optimal size is model-specific.** Pruning the 9-feature panel to **6** (`momentum_12_1`, `momentum_756`, `return_1d`, `vol_ewm_20`, `distance_52w_high`, `log_dollar_volume`) raises OOS IC +0.077 → **+0.088** and gross Sharpe +1.17 → **~1.97** — identically for Lasso and Ridge (`config/experiments/lasso_curated6_pit_h21.yaml`). LightGBM instead peaks at **8** features (drop only `beta_60`); cutting it to 6 *hurts* it, because it can exploit `idio_vol_20`/`max_return_21d` via interactions that linear cannot.
+4. **`beta_60` is anti-generalizing for every model.** It is LightGBM's #1 feature by gain (18.8%) yet removing it *raises* OOS Sharpe; for the linear models it is the single biggest drag (dropping it is most of the 9→6 gain). Market beta is regime-unstable, so the learned tilt does not persist into 2025. One low-vol representative (`vol_ewm_20`) must be kept — dropping the whole vol family collapses the signal.
+
+These results are *within-regime*: the lenient and strict graders agree here only because the 2025 test slice is a continuation of the recent training regime. Across the 2022 regime break, the strict (forward-chaining) grader correctly shrinks the linear model to the null — see [Why hyperparameter optimization is fragile to regime shift](#why-hyperparameter-optimization-is-fragile-to-regime-shift). Ablation detail in [`notebooks/05_feature_exploration.ipynb`](notebooks/05_feature_exploration.ipynb).
 
 ### Synthesizing thesis
 
@@ -546,7 +537,7 @@ Notebooks (each maps to one or more README sections; together they provide inter
 - `notebooks/01_prediction_diagnostics.ipynb` — Stored-prediction diagnostics on the headline 21-day models: apples-to-apples comparison, rolling 60-day IC, regime-conditional IC, net-of-cost gross-vs-net Sharpe with turnover annotation. Supports Discussion Claims 1 (net-of-cost inversion), 2 (regime fragility), and Methodology.
 - `notebooks/02_classical_timeseries.ipynb` — Classical EMH baselines (ARIMA / GARCH / GBM) on the per-ticker time series, contrasted with the cross-sectional L1 regression. Supports Discussion Claim 1 (why cross-sectional methods beat univariate).
 - `notebooks/03_headline_robustness.ipynb` — Bootstrap CI / decile bucket monotonicity / time-split partition on the L1 regression headline. Supports Methodology (deflated-Sharpe-adjacent rigor).
-- `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Supports Methodology (panel design) + Discussion Claim 3 (L1 stability).
+- `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Now also includes the **panel-ablation findings** (9→6 prune, `beta_60` anti-generalizing, L1 ≈ L2, vol-cluster-is-signal). Supports Methodology (panel design) + Discussion's [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
 - `notebooks/06_hp_selection_bias.ipynb` — Visualizes the held-out Optuna sweeps documented in the README's Methodology Optuna-sweep table. Shows the chosen HPs across cutoffs (lambda_l1 varies 390× across Split A vs Split B), OOS IC bar chart, and the held-out-vs-default inversion at 21-day. Supports Discussion Claim 2.
 
 **Extras (independent of the cross-sectional ML narrative):**
