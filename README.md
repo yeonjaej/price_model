@@ -8,13 +8,16 @@ A PIT-corrected, held-out 21-day cross-sectional return predictor on the S&P 500
 
 A **6-feature cross-sectional linear regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) is the strongest model on **both** gross signal and net-of-cost return — beating long-horizon momentum and held-out-tuned LightGBM / XGBoost / CatBoost:
 
-| Model (regime-confined) | Gross IC | t-stat | Gross Sharpe | Net 20 bp Sharpe | Annual turnover |
-|---|---|---|---|---|---|
-| **6-feature linear (Lasso ≈ Ridge)** | **+0.089** | **+10.5** | **+2.00** | **+1.94** | 95× |
-| 36-month momentum factor | +0.050 | +7.2 | +1.69 | +1.68 | 15× |
-| LightGBM, held-out Optuna (rank panel) | +0.069 | +6.1 | +1.38 | +1.32 | 90× |
-| CatBoost, held-out Optuna (rank panel) | +0.061 | +4.9 | +1.07 | +1.03 | 64× |
-| XGBoost, held-out Optuna (rank panel) | +0.058 | +4.9 | +0.97 | +0.92 | 73× |
+Long-short Sharpe is for a **top-20% / bottom-20% (quintile), equal-weighted, daily-rebalanced** portfolio; net columns deduct turnover × cost (3 / 10 / 20 bp per side). See [Metric definitions](#metric-definitions) for the full Sharpe convention and assumptions.
+
+| Model (regime-confined) | Gross IC | t-stat | Gross Sharpe | Net 3 bp | Net 10 bp | Net 20 bp | Annual turnover |
+|---|---|---|---|---|---|---|---|
+| **Lasso, 6-feature** | **+0.0892** | **+10.5** | **+2.00** | **+1.99** | **+1.97** | **+1.94** | 95× |
+| **Ridge, 6-feature** | +0.0863 | +10.4 | +1.99 | +1.98 | +1.96 | +1.92 | 102× |
+| 36-month momentum factor | +0.0496 | +7.2 | +1.69 | +1.69 | +1.69 | +1.68 | 15× |
+| LightGBM, held-out Optuna (rank panel) | +0.0685 | +6.1 | +1.38 | +1.37 | +1.35 | +1.32 | 90× |
+| CatBoost, held-out Optuna (rank panel) | +0.0606 | +4.9 | +1.07 | +1.06 | +1.05 | +1.03 | 64× |
+| XGBoost, held-out Optuna (rank panel) | +0.0583 | +4.9 | +0.97 | +0.96 | +0.95 | +0.92 | 73× |
 
 Observations:
 
@@ -24,9 +27,9 @@ Observations:
 
 **Full-history (conservative) framing.** Trained on the full expanding window instead of one regime, the same linear recipe scores only **IC +0.0695 / gross Sharpe +1.24** and **loses net-of-cost to momentum** (+1.17 vs +1.81 at 20 bp) — the project's original headline. The gap between the two framings *is* the finding: the edge is regime-bound. Across the 2022 regime break, temporally-honest (forward-chained) coefficient/HP selection shrinks the linear model to the null, and the pre-2022 sub-window IC is significantly **negative (−0.0747)**. See [Discussion](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
 
-For the technical setup (PIT correction, regime-confined walk-forward with embargo, inner CV vs held-out Optuna, deflated Sharpe), see [Methodology](#methodology); for why linear beats trees, why the edge is regime-bound, and the L1-vs-L2 and net-of-cost analysis, see [Discussion](#discussion).
+For the technical setup (PIT correction, regime-confined walk-forward with embargo, inner CV vs held-out Optuna), see [Methodology](#methodology); for why linear beats trees, why the edge is regime-bound, and the L1-vs-L2 and net-of-cost analysis, see [Discussion](#discussion).
 
-The result is **statistically rigorous, regime-conditional, and not deployable for retail investors** after bid-ask spreads, commissions, and capital-gains taxes. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations) and [Scope and limitations](#scope-and-limitations) for the bounds on what these numbers mean. For the precise definitions of each metric in the table above (IC, t-stat, gross / net long-short Sharpe, annual turnover, deflated Sharpe), see [Metric definitions](#metric-definitions).
+The result is **statistically rigorous, regime-conditional, and not deployable for retail investors** after bid-ask spreads, commissions, and capital-gains taxes. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations) and [Scope and limitations](#scope-and-limitations) for the bounds on what these numbers mean. For the precise definitions of each metric in the table above (IC, t-stat, gross / net long-short Sharpe, annual turnover), see [Metric definitions](#metric-definitions).
 
 ## Metric definitions
 
@@ -76,6 +79,21 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
   √(252 / horizon_days)`. Above +1.0 is the conventional bar for
   institutional tradeability; reported values are gross of all transaction
   costs unless explicitly labeled "net N bp."
+
+  *Rebalancing & assumptions.* The book is **rebalanced daily** — on every
+  trading date the top/bottom quintiles are re-formed from that date's
+  cross-sectional predictions (the 21 days is the return *horizon*, not the
+  rebalance frequency). Each date's return is the equal-weighted
+  `mean(top.realized) − mean(bottom.realized)` of the 21-day forward excess
+  return, so the daily-dated return series is **overlapping** (21-day
+  windows). Assumptions baked into the Sharpe: (i) dollar-neutral,
+  equal-weight legs; (ii) costless rebalancing for *gross* Sharpe (the net
+  columns deduct `turnover_t · bp`); (iii) no financing, short-borrow, or
+  capital-gains tax; (iv) annualization by `√(252/21)`. The overlap makes
+  adjacent daily returns autocorrelated, which understates the naive
+  standard deviation and therefore somewhat **inflates** the Sharpe — a
+  caveat applied uniformly across all models, so it does not affect the
+  ranking.
 - **Annual turnover.** One-sided fraction of portfolio capital traded
   per year, computed as `mean(0.5 · Σ_i |w_t[i] − w_{t-1}[i]|) · 252`
   where `w_t` is the long-short weight vector on date `t`. An annual
@@ -92,6 +110,10 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
   is annualized to a Sharpe using the same `√(252/horizon)` convention
   as gross Sharpe. Reported at 3, 10, and 20 bp per side to span
   institutional → retail cost regimes.
+<!-- Deflated Sharpe and cross-sectional dispersion are not used in the current
+     regime-confined headline; metric definitions commented out for now (the code
+     and scripts remain). Restore if these metrics re-enter the headline.
+
 - **Deflated Sharpe ratio (DSR).** Bailey & López de Prado (2014)
   multi-test-corrected probability that a model's true Sharpe is
   positive given the observed Sharpe, the number of trials attempted,
@@ -111,6 +133,7 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
   variable for both the regime-aware LightGBM feature panel and the
   walk-forward ensemble. Implemented as the `cs_return_dispersion_20`
   feature in `src/price_model/features/cross_features.py`.
+-->
 
 ## Reproduction
 
@@ -168,7 +191,7 @@ PYTHONPATH=src python scripts/spectrum_comparison.py         # model × panel gr
 PYTHONPATH=src python scripts/vol_ablation_lasso_ridge.py    # 9→6 prune; beta_60 is anti-generalizing
 PYTHONPATH=src python scripts/inspect_headline_lasso_coefficients.py  # vol-cluster signs are signal, not L1 cancellation (Ridge agrees)
 PYTHONPATH=src python scripts/survivorship_ablation_headline.py       # PIT-on vs survivor-snapshot, in-regime
-PYTHONPATH=src python scripts/deflated_sharpe_audit.py       # Bailey-López de Prado multi-test correction
+# Deflated Sharpe (scripts/deflated_sharpe_audit.py) is parked for now — not used in the headline.
 ```
 
 ### Reproducing the full-history (conservative) framing
@@ -283,11 +306,16 @@ Gross IC and gross long-short Sharpe assume costless rebalancing. Net-of-cost Sh
 
 Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-equivalent). Turnover and cost-drag mechanics are implemented in `src/price_model/eval/turnover.py`. For the **regime-confined headline** use `scripts/net_cost_regime.py`, which pulls each model from the store deduped to its latest run; the shared `scripts/compare_net_of_cost.py` intersects the full accumulated store (many overlapping historical runs) and drops most of the new regime models, so it is not reliable for the regime headline.
 
+<!-- Deflated Sharpe is not used in the current regime-confined headline; subsection
+     commented out for now (scripts/deflated_sharpe_audit.py remains). Restore if DSR
+     re-enters the headline.
+
 ### Bailey-López de Prado deflated Sharpe (multi-test correction)
 
 `scripts/deflated_sharpe_audit.py` applies the deflated Sharpe ratio (Bailey & López de Prado 2014) across all project models. The correction inflates the effective number of trials by the project's experiment count and accounts for skew and kurtosis of the return distribution to compute `P(true_Sharpe > 0 | observed)`. Threshold for "significant after multi-test correction" is DSR > 0.95.
 
 The deflated-Sharpe pass list aligns with the t-stat ranking. In the regime-confined headline the 6-feature linear models (t ≈ 10.5) and momentum factors (t ≈ 7.2) clear DSR > 0.99 trivially; the tuned trees (t ≈ 4.9–6.1) clear DSR > 0.95; lower-t-stat variants do not. (DSR still applies the project-wide trial count, so a high single-model t-stat is necessary but not sufficient.)
+-->
 
 ### Pure-momentum Lasso cancellation diagnostic
 
@@ -299,9 +327,14 @@ The deflated-Sharpe pass list aligns with the t-stat ranking. In the regime-conf
 
 This diagnostic supports the discussion of why pure-momentum L1 produces negative OOS IC (see [Discussion](#discussion)). **Contrast with the headline vol cluster:** there the opposite-sign coefficients are *signal* (Ridge reproduces them; the `vol_ewm − idio_vol` spread is real), whereas here the four momentum features are *truly* redundant ("did this stock rise over some multi-month window"), so the cancellation has nothing to extract and collapses to the noisy intercept. The cancel-ratio metric alone cannot tell the two apart — Ridge is the control: it shares weight on signal-bearing clusters but cannot rescue a genuinely redundant one.
 
-### Regime indicator and audit-driven LightGBM v3 panel
+### Audit-driven LightGBM v3 panel
+
+<!-- Cross-sectional dispersion is not used in the current headline (the engineered
+     v3 panel loses to the rank panel); description commented out for now. The
+     `cs_return_dispersion_20` feature and its test remain in the code.
 
 The 14-feature LightGBM v3 panel includes `cs_return_dispersion_20` — the cross-sectional standard deviation of daily log returns smoothed by 20-day rolling mean. The feature is a lookahead-safe regime conditioning variable that distinguishes high-dispersion (idiosyncratic-pricing) regimes from low-dispersion (uniform-market-move) regimes without using forward-looking labels. Implementation in `src/price_model/features/cross_features.py::CsReturnDispersion20`; lookahead safety verified by `tests/test_microstructure_features.py`.
+-->
 
 The v3 panel curation (14 features chosen from a 21-feature candidate panel via gain importance + cross-feature correlation analysis) is documented inline in `config/experiments/extended_kaggle_v3_curated.yaml`; audit script in `scripts/audit_lightgbm_features.py`.
 
