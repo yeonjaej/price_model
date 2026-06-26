@@ -317,6 +317,8 @@ Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-e
 The deflated-Sharpe pass list aligns with the t-stat ranking. In the regime-confined headline the 6-feature linear models (t ≈ 10.5) and momentum factors (t ≈ 7.2) clear DSR > 0.99 trivially; the tuned trees (t ≈ 4.9–6.1) clear DSR > 0.95; lower-t-stat variants do not. (DSR still applies the project-wide trial count, so a high single-model t-stat is necessary but not sufficient.)
 -->
 
+> **Note:** All Sharpe figures in this README are *raw* annualized Sharpe, **not** deflated. The multi-test (deflated-Sharpe) correction is parked above; it should be restored before any headline is finalized, since this branch searched many configurations (3 trees × 2 panels + linear variants + ablations) and DSR is exactly the correction that accounts for that search.
+
 ### Pure-momentum Lasso cancellation diagnostic
 
 `scripts/inspect_momentum_lasso_coefficients.py` fits Lasso and ElasticNet on a four-feature pure-momentum panel (12-1, 18-month, 24-month, 36-month) and prints the fitted coefficients alongside the feature correlation matrix. The diagnostic confirms:
