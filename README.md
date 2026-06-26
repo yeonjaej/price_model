@@ -33,7 +33,7 @@ The result is **statistically rigorous, regime-conditional, and not deployable f
 
 ## Metric definitions
 
-The headline 21-day result is reported in terms of standard cross-sectional asset-pricing metrics. The definitions below apply throughout the rest of the README. The worked example below uses 5-day forward excess return because that is what most stored predictions in the project are; substitute 21-day forward excess return for the headline result without loss of generality (the formula is the same, only the horizon changes).
+The headline 21-day result is reported in terms of standard cross-sectional asset-pricing metrics, defined below. The worked example uses a small illustrative cross-section; the same formula applies at any horizon.
 
 - **Information Coefficient (IC).** Cross-sectional ranking quality of
   the model, averaged over time.
@@ -49,8 +49,8 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
   refers to the return target, not the number of observations.
 
   *Time-averaged IC.* The reported IC is the unweighted average of the
-  per-date ICs across all evaluation dates (e.g., `n_dates = 336` for the
-  21-day headline OOS slice 2025-01-02 → 2026-04-29). A weak ranker on
+  per-date ICs across all evaluation dates (e.g., `n_dates = 348` for the
+  21-day headline OOS slice 2025-01-02 → 2026-06-24). A weak ranker on
   most days plus one strong day does not produce a high IC; consistent
   ranking is required.
 
@@ -357,7 +357,7 @@ Two caveats limit how broadly this conclusion generalizes:
 - **The 6-feature panel is small and ex-ante-curated.** The linear advantage depends on this curation. On the broader 14-feature engineered panel the linear recipe is weaker — but so are the trees (every model is worse there), so curation, not model class, is the lever.
 - **The post-2022-10 regime is structurally momentum-friendly.** In a regime with more leadership rotation or weaker momentum persistence, the linear-on-anomalies recipe would compress and trees might catch up. The result is robust within the studied window but has not been verified across regime changes.
 
-**Crucially, the linear model is itself regime-bound.** A time-split partition of its full prediction history (see [`notebooks/03_headline_robustness.ipynb`](notebooks/03_headline_robustness.ipynb)) shows IC = **−0.0747 (t = −5.34)** on the 2020-mid → 2022-10 window — the same panel is *significantly anti-predictive* before the bull regime. The +0.089 in-regime OOS IC is not a steady-state property; it is the model's behavior in one regime. This is exactly why the headline trains regime-confined: the CV-fit coefficients learn whichever structure dominates the training window, and training across the 2022 break makes a temporally-honest fit collapse to the null (Claim 3 below). Trained on the matching regime, deployed in its continuation, it works; straddling a regime change, it inverts.
+**Crucially, the linear model is itself regime-bound.** A time-split partition of its full prediction history (see [`notebooks/03_headline_robustness.ipynb`](notebooks/03_headline_robustness.ipynb)) shows IC = **−0.0747 (t = −5.34)** on the 2020-mid → 2022-10 window — the same panel is *significantly anti-predictive* before the bull regime. The +0.089 in-regime OOS IC is not a steady-state property; it is the model's behavior in one regime. This is exactly why the headline trains regime-confined: the CV-fit coefficients learn whichever structure dominates the training window, and training across the 2022 break makes a temporally-honest fit collapse to the null (see [Why hyperparameter optimization is fragile to regime shift](#why-hyperparameter-optimization-is-fragile-to-regime-shift)). Trained on the matching regime, deployed in its continuation, it works; straddling a regime change, it inverts.
 
 The conclusion is therefore "within the post-2022-10 regime, on this universe at this horizon, a curated 6-feature linear model outperforms every tree-ensemble variant tested" — not "ML cannot succeed in cross-sectional equity prediction generally," and not "the edge is regime-robust."
 
@@ -561,11 +561,11 @@ tests/                   # leakage tests, PIT tests, ticker tests, contract test
 Notebooks (each maps to one or more README sections; together they provide interactive support for the project's claims):
 
 - `notebooks/00_pit_ablation_study.ipynb` — PIT ablation study on the legacy v2 LightGBM panel. Quantifies survivorship-bias inflation (61–89% depending on feature-set strength). Supports Methodology + Data quality.
-- `notebooks/01_prediction_diagnostics.ipynb` — Stored-prediction diagnostics on the headline 21-day models: apples-to-apples comparison, rolling 60-day IC, regime-conditional IC, net-of-cost gross-vs-net Sharpe with turnover annotation. Supports Discussion Claims 1 (net-of-cost inversion), 2 (regime fragility), and Methodology.
-- `notebooks/02_classical_timeseries.ipynb` — Classical EMH baselines (ARIMA / GARCH / GBM) on the per-ticker time series, contrasted with the cross-sectional L1 regression. Supports Discussion Claim 1 (why cross-sectional methods beat univariate).
-- `notebooks/03_headline_robustness.ipynb` — Bootstrap CI / decile bucket monotonicity / time-split partition on the L1 regression headline. Supports Methodology (deflated-Sharpe-adjacent rigor).
+- `notebooks/01_prediction_diagnostics.ipynb` — Stored-prediction diagnostics on the headline 21-day models: apples-to-apples comparison, rolling 60-day IC, regime-conditional IC, net-of-cost gross-vs-net Sharpe with turnover annotation. Supports the net-of-cost and regime-conditionality analysis in Discussion.
+- `notebooks/02_classical_timeseries.ipynb` — Classical EMH baselines (ARIMA / GARCH / GBM) on the per-ticker time series, contrasted with the cross-sectional linear model. Supports the case that the cross-sectional approach beats per-ticker time-series baselines.
+- `notebooks/03_headline_robustness.ipynb` — Bootstrap CI / decile bucket monotonicity / time-split partition on the linear headline (the −0.0747 pre-2022 sub-window). Supports the regime-conditionality analysis.
 - `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Now also includes the **panel-ablation findings** (9→6 prune, `beta_60` anti-generalizing, L1 ≈ L2, vol-cluster-is-signal). Supports Methodology (panel design) + Discussion's [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
-- `notebooks/06_hp_selection_bias.ipynb` — Visualizes the held-out Optuna sweeps documented in the README's Methodology Optuna-sweep table. Shows the chosen HPs across cutoffs (lambda_l1 varies 390× across Split A vs Split B), OOS IC bar chart, and the held-out-vs-default inversion at 21-day. Supports Discussion Claim 2.
+- `notebooks/06_hp_selection_bias.ipynb` — Visualizes the **cross-regime** HP fragility: chosen HPs swinging across training cutoffs (`lambda_l1` over ~two orders of magnitude) and the held-out-vs-default inversion at 21-day. Supports Discussion's [HP-fragility subsection](#why-hyperparameter-optimization-is-fragile-to-regime-shift) — contrast with the **in-regime** sweeps in Methodology, where CV predicts OOS.
 
 **Extras (independent of the cross-sectional ML narrative):**
 
@@ -612,7 +612,7 @@ a product of the above collaboration.
 
 ## Citations
 
-- **Han, Y., He, A., Rapach, D., and Zhou, G.** (2024). "Expected Stock Returns and the Cross-Section: An E-LASSO Approach." *Review of Finance*. — Panel-curation principle (one feature per economic family, rank-normalized, CV-selected α) used in the headline 9-feature L1 regression (`lasso_elasso_pit_h21`).
+- **Han, Y., He, A., Rapach, D., and Zhou, G.** (2024). "Expected Stock Returns and the Cross-Section: An E-LASSO Approach." *Review of Finance*. — Panel-curation principle (one feature per economic family, rank-normalized, CV-selected α) used in the headline 6-feature linear regression (`lasso_curated6_pit_h21`), pruned from a 9-feature superset.
 - **Jegadeesh, N. and Titman, S.** (1993). "Returns to Buying Winners and Selling Losers." *Journal of Finance* 48(1). — 12-1 momentum anomaly.
 - **Moskowitz, T., Ooi, Y. H., and Pedersen, L. H.** (2012). "Time Series Momentum." *Journal of Financial Economics* 104(2). — Long-horizon (TSMOM) momentum.
 - **Lehmann, B.** (1990). "Fads, Martingales, and Market Efficiency." *Quarterly Journal of Economics* 105(1). — 1-day reversal.
