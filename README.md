@@ -4,7 +4,7 @@ A point-in-time (PIT) corrected cross-sectional equity return predictor on the S
 
 ## Executive summary
 
-A PIT-corrected, held-out 21-day cross-sectional return predictor on the S&P 500. The headline is reported **regime-confined**: trained only on the post-2022-10 bull regime (train 2022-10-10 → 2024-11-30, single refit; trees held-out-Optuna-tuned with the cutoff at 2024-12-31) and tested on 2025-01-02 → 2026-06-24 (348 dates). This is the honest "deploy when the regime resembles recent training" scenario; the more conservative full-history framing is below.
+A PIT-corrected, held-out 21-day cross-sectional return predictor on the S&P 500. The headline is reported **regime-confined**: trained only on the post-2022-10 bull regime (train 2022-10-10 → 2024-11-30, single refit; trees held-out-Optuna-tuned with the cutoff at 2024-12-31) and tested on 2025-01-02 → 2026-06-24 (348 dates). This is the honest "deploy when the regime resembles recent training" scenario; the more conservative across-regime framing is below.
 
 A **6-feature cross-sectional linear regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) is the strongest model on **both** gross signal and net-of-cost return — beating long-horizon momentum and held-out-tuned LightGBM / XGBoost / CatBoost:
 
@@ -25,7 +25,7 @@ Observations:
 - **L1 ≈ L2** — Lasso (+0.0892) and Ridge (+0.0863) tie on every column; the regularizer is not the story, the curated panel is. (Pruning the prior 9-feature panel to 6 — dropping `idio_vol_20`, `max_return_21d`, and the anti-generalizing `beta_60` — is most of the lift.)
 - **Every tuned tree trails** — even with held-out Optuna on each tree's *best* panel. All three trees prefer the 9-feature rank panel over the 14-feature engineered one. The signal is near-linear; trees over-parameterize it.
 
-**Full-history (conservative) framing.** Trained on the full expanding window instead of one regime, the same linear recipe scores only **IC +0.0695 / gross Sharpe +1.24** and **loses net-of-cost to momentum** (+1.17 vs +1.81 at 20 bp) — the project's original headline. The gap between the two framings *is* the finding: the edge is regime-bound. Across the 2022 regime break, temporally-honest (forward-chained) coefficient/HP selection shrinks the linear model to the null, and the pre-2022 sub-window IC is significantly **negative (−0.0747)**. See [Discussion](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
+**Conservative (across-regime) framing.** Trained on the full post-warmup window — **≈ 2020-01-06 → 2024-12-31**, which spans the **COVID-shock regime of 2020** (the crash, the recovery, and the 2021 zero-rate growth/meme bull — extreme volatility and cross-sectional dispersion, a structurally different cross-section), the 2022 rate-shock bear, and the 2022-10+ bull — the project's original 9-feature linear headline scored only **IC +0.0695 / gross Sharpe +1.24** and **lost net-of-cost to momentum** (+1.17 vs +1.81 at 20 bp). That the edge is **regime-bound** is the finding: training across these mixed regimes makes a temporally-honest (forward-chained) fit collapse to the null, and the same panel's pre-2022 sub-window IC is significantly **negative (−0.0747)**. (Throughout, "across-regime" means this 2020-01→2024-12 training span; "regime-confined" means the 2022-10-10→2024-11-30 bull-only span.) See [Discussion](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
 
 For the technical setup (PIT correction, regime-confined walk-forward with embargo, inner CV vs held-out Optuna), see [Methodology](#methodology); for why linear beats trees, why the edge is regime-bound, and the L1-vs-L2 and net-of-cost analysis, see [Discussion](#discussion).
 
@@ -194,9 +194,9 @@ PYTHONPATH=src python scripts/survivorship_ablation_headline.py       # PIT-on v
 # Deflated Sharpe (scripts/deflated_sharpe_audit.py) is parked for now — not used in the headline.
 ```
 
-### Reproducing the full-history (conservative) framing
+### Reproducing the across-regime (conservative) framing
 
-The full-history numbers in the Executive summary (IC +0.0695; momentum wins net) are the project's **original** headline. On this branch the headline configs are regime-confined, so those numbers reproduce from the **unmodified full-history configs on the `main` branch** (`lasso_elasso_pit_h21`, `extended_kaggle_v3_curated_h21`, `momentum_factor_pit_h21`, …) via the prior `cli run` + `compare_*` flow.
+The across-regime numbers in the Executive summary (IC +0.0695; momentum wins net) are the project's **original** headline. On this branch the headline configs are regime-confined, so those numbers reproduce from the **unmodified configs on the `main` branch** (`lasso_elasso_pit_h21`, `extended_kaggle_v3_curated_h21`, `momentum_factor_pit_h21`, …) via the prior `cli run` + `compare_*` flow.
 
 Determinism: results are deterministic for a fixed yfinance / Ken French snapshot (small <5% drift as data refreshes); Optuna sweeps are non-deterministic (TPE seed) but stable within ±0.001 across re-runs.
 
@@ -226,7 +226,7 @@ The forecast target is the cross-sectional excess log-return over a fixed horizo
 - `first_refit: 2025-01-02` + `refit_freq_days: 9999` — a single refit, so the training block is **[2022-10-10, 2024-11-30]** and the test slice is **[2025-01-02, 2026-06-24]** (348 dates).
 - `embargo_days: 33` (calendar) — covers the 21-**trading**-day (~31 calendar) target, so the last training label resolves before the test window. (This fixes the earlier `embargo_days: 22` calendar-vs-trading unit bug; `train_end = first_refit − 33 = 2024-11-30`.)
 
-`train_start` and `first_refit` are additive harness parameters (default `None` = the original full-history expanding-window behavior, still used on `main`). For the legacy full-history framing, omit them and use `min_train_days`/`refit_freq_days` as before.
+`train_start` and `first_refit` are additive harness parameters (default `None` = the original expanding-window behavior, which trains from warmup-end across all regimes — still used on `main`). For that across-regime framing, omit them and use `min_train_days`/`refit_freq_days` as before.
 
 **Feature lookahead safety** is verified by the truncation-invariance test in `tests/test_no_leakage.py`: each registered *feature*'s value at date `t` must be unchanged when the panel is truncated to dates `≤ t`. The test is parametrized over `FEATURE_REGISTRY` and runs in CI. Note it covers features only — *target* leakage across the train/test boundary is the embargo's job (now airtight at 33 days), not this test's.
 
@@ -262,7 +262,7 @@ The HP-selection bias correction is provided by the `--max-date` flag in `script
 Two in-regime properties, both opposite to the cross-regime case:
 
 - **CV predicts OOS.** Every model's 2025+ OOS IC *exceeds* its CV IC (e.g. LightGBM 0.051 → 0.069) — no fragility penalty, because the CV folds and the test slice share the regime. The rank-9 panel wins CV for all three trees, so the panel choice is made honestly (on CV), not by peeking at OOS.
-- **No HP fragility within a regime.** The earlier cross-regime sweeps (full-history, 5-day) showed the opposite: `lambda_l1` swinging two orders of magnitude across training cutoffs and CV IC *failing* to predict OOS IC — the signature of HP optimization across a regime break. That fragility is a property of training across the 2022 break, not of Optuna; confining to one regime removes it. See [Discussion](#why-hyperparameter-optimization-is-fragile-to-regime-shift) and [`notebooks/06_hp_selection_bias.ipynb`](notebooks/06_hp_selection_bias.ipynb).
+- **No HP fragility within a regime.** The earlier across-regime sweeps (5-day) showed the opposite: `lambda_l1` swinging two orders of magnitude across training cutoffs and CV IC *failing* to predict OOS IC — the signature of HP optimization across a regime break. That fragility is a property of training across the 2022 break, not of Optuna; confining to one regime removes it. See [Discussion](#why-hyperparameter-optimization-is-fragile-to-regime-shift) and [`notebooks/06_hp_selection_bias.ipynb`](notebooks/06_hp_selection_bias.ipynb).
 
 ### Headline feature panel: 6 curated anomalies (pruned from 9)
 
@@ -367,7 +367,7 @@ Net-of-cost ranking depends on turnover, and the two training framings give oppo
 
 **Regime-confined (headline): linear wins net.** Trained on the bull regime, the 6-feature linear model has gross Sharpe +2.00 at **95×** annual turnover (lower than the 9-feature's 127× — fewer, more stable features), so at 20 bp it retains net **+1.94**. The 36-month momentum factor is the low-turnover champion (15×, net +1.68) but its lower gross (+0.050 IC, Sharpe +1.69) can't catch the supercharged linear. Tuned trees net +0.9–1.3 (turnover 64–90×). So in-regime, **linear wins on both gross and net** — the first configuration in this project where the model beats momentum net-of-cost.
 
-**Full-history (conservative): momentum wins net.** Trained on the full expanding window, the linear model's gross Sharpe is only +1.24 at 128× turnover → net +1.17 at 20 bp, while mom_756 retains +1.81 (15× turnover, ~99% of gross). Here momentum wins net by +0.64 Sharpe, the README's original conclusion.
+**Across-regime (conservative): momentum wins net.** Trained across all regimes (2020-01→2024-12), the linear model's gross Sharpe is only +1.24 at 128× turnover → net +1.17 at 20 bp, while mom_756 retains +1.81 (15× turnover, ~99% of gross). Here momentum wins net by +0.64 Sharpe, the README's original conclusion.
 
 **What flips it:** regime-matched training nearly doubles the linear gross Sharpe (1.24 → 2.00) *and* the curated 6-feature panel cuts turnover (127× → 95×). Momentum's net Sharpe barely moves between framings (it is training-independent); the linear model's does. So the net-of-cost winner is not a property of the strategies alone — it is a property of whether you train across or within the deployment regime.
 
@@ -382,7 +382,7 @@ This is exactly the **DeMiguel-Garlappi-Uppal (2009)** result generalized: they 
 - **Default HPs are like 1/N.** They don't fit training data as hard, so they generalize better.
 - **Optuna-selected HPs are like Markowitz weights.** They minimize a training-period objective but inherit the estimation error.
 
-The cleanest *cross-regime* demonstration is the full-history sweep: held-out Optuna at 21-day scored OOS IC +0.0187 vs default HPs' +0.0274 — even with the deployment slice excluded from HP selection, the chosen HPs *underperformed defaults*, because they were tuned across the 2022 regime break. The 5-day evidence is the same signature (Split B beats Split A on 2025+ but loses full-sample; `lambda_l1` swings two orders of magnitude across cutoffs).
+The cleanest *cross-regime* demonstration is the across-regime sweep (2020-01→2024-12): held-out Optuna at 21-day scored OOS IC +0.0187 vs default HPs' +0.0274 — even with the deployment slice excluded from HP selection, the chosen HPs *underperformed defaults*, because they were tuned across the 2022 regime break. The 5-day evidence is the same signature (Split B beats Split A on 2025+ but loses full-sample; `lambda_l1` swings two orders of magnitude across cutoffs).
 
 **This fragility is a cross-regime property, not an Optuna property.** Confine training to one regime and it disappears: in the regime-confined sweeps (Methodology table) every tuned tree's OOS IC *exceeds* its CV IC — CV becomes a reliable predictor of OOS once the folds and the test share the regime. So the practical rule is not "don't tune" but "don't tune across a regime break": verify a tuned model's OOS IC beats defaults on a held-out slice, and confine training to the deployment regime.
 
@@ -502,7 +502,7 @@ observed.
 
 The regime-confined headline IC of **+0.089** (6-feature linear on 2025+ OOS) and every other IC in the README — gross or net — should be interpreted with the following caveats. The bias sources are inherent to the data and methodology and apply uniformly across models, not to one model in isolation.
 
-0. **Regime-confined training is best-case, by construction.** The headline trains only on the bull regime it is then deployed into. This *raises* the apparent edge (+0.089 vs the full-history +0.0695) precisely by specializing the model to one regime — so it is **more** regime-bound, not less. It answers "how well does this work when the deployment regime matches recent training?", not "how well does it work in general." The full-history framing (+0.0695, loses net to momentum) is the more conservative number.
+0. **Regime-confined training is best-case, by construction.** The headline trains only on the bull regime it is then deployed into. This *raises* the apparent edge (+0.089 vs the across-regime +0.0695) precisely by specializing the model to one regime — so it is **more** regime-bound, not less. It answers "how well does this work when the deployment regime matches recent training?", not "how well does it work in general." The across-regime framing (+0.0695, loses net to momentum) is the more conservative number.
 1. **PIT correction is partial.** Because yfinance does not return data for SIVB, FRC, ATVI, AGN, and similar delisted symbols, those tickers do not appear in the PIT panel even when Wikipedia indicates they were index members on the relevant dates. The PIT-corrected backtest therefore still excludes the worst realized losers of the 2022-2023 banking crisis. A fully PIT-correct analysis using paid data (Norgate, Polygon, or CRSP) would either misrank or correctly short SIVB at −85% on 2023-03-08; the present model does neither.
 2. **Survivorship-bias inflation — measured directly on the headline.** `scripts/survivorship_ablation_headline.py` runs the headline recipe on the same price source under per-date PIT membership vs a current-survivors-only cohort. On the **2025+ slice the inflation is ≈ 0** (the recent roster ≈ the point-in-time roster), so the headline is not survivorship-inflated *on its own window*. But over the **full 2021–2026 sample the honest IC is ≈ 0 while the survivor cohort shows +0.016** — a sign-flip — confirming the general rule (bias is larger when the honest signal is weak; cf. the legacy v2 ablation in `notebooks/00`, 61–89% inflation). Even so, the ~12% of delisted names yfinance cannot fetch are absent from *every* arm, so the measured inflation is itself a floor.
 3. **The evaluation window is regime-concentrated — and the headline leans into it.** The 2025+ window is Mag-7 / AI-concentration / momentum-persistent. The headline both *trains* and *tests* inside this regime (caveat 0), so it reflects "+0.089 deploying into a momentum-friendly regime that resembles recent training," not an all-weather number. The same panel's pre-2022 IC is significantly **negative (−0.0747)**.
@@ -528,7 +528,7 @@ Listed in approximate order of effort:
 - **The edge is sharply regime-concentrated — and the headline trains inside it.** A time-split of the linear model's full prediction history at 2022-10-10 (see [`notebooks/03_headline_robustness.ipynb`](notebooks/03_headline_robustness.ipynb)) shows three regimes:
    - **Pre-Oct-2022** (2020-mid → 2022-10): IC = **−0.0747** (t = −5.34). The same panel is *significantly anti-predictive* in the pre-bull regime.
    - **Oct-2022 → end-2024**: IC ≈ **0** — the transitional window the headline trains on.
-   - **2025+ (the test slice)**: IC = **+0.089** (regime-confined training), +0.0695 (full-history training).
+   - **2025+ (the test slice)**: IC = **+0.089** (regime-confined training), +0.0695 (across-regime training).
 
    The headline confines training to the post-2022-10 regime by design, so its edge lives **entirely** in the momentum-persistent regime. The 2025+ OOS IC is a valid causal measurement, but training across the 2022 break makes a temporally-honest fit collapse to the null. **Deployment outside a megacap-momentum-persistent regime is not supported by this evidence.**
 - **Single evaluation period, no multi-window robustness.** All numbers are one OOS window (2025+). A multi-window stress test (2018-2020, 2020-2022, 2022-2024, 2024-2026 in sequence) — ideally with paid PIT-correct data — is the most-needed extension and has not been performed. "Extend the regime" is the natural next step from this branch.
