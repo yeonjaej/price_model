@@ -1,133 +1,123 @@
-"""Clean survivorship-bias ablation on the headline 9-feature L1 model.
+"""Survivorship-bias ablation on the headline models: Lasso-6, Ridge-6, tuned LightGBM.
 
-Isolates the survivorship effect from the composition/source change that
-confounds notebooks/00 (which compares a 156-name top-cap `sp500` list against
-the 701-name `sp500_pit` union — two different sources AND two different
-time-handlings at once).
+All arms draw from the SAME price source (sp500_pit, pit_filter=False) and use each
+model's headline recipe, regime-confined (train 2022-10-10 -> 2024-11-30 via
+train_start + first_refit, embargo 33, single refit), tested on 2025+. The three
+arms differ ONLY in which cross-section is used on each date:
 
-Here all three arms are drawn from the SAME price source (the 701-name
-sp500_pit panel, loaded once with pit_filter=False), and differ ONLY in which
-cross-section is used on each date:
+  1. PIT-on (honest = headline)  — per-date S&P 500 membership (filter_panel_to_pit).
+  2. Survivor-snapshot (biased)  — the CURRENT roster (members_on_date at the last
+                                   date), used across all history.
+  3. All-available               — every name whenever it has data (no filter).
 
-  1. PIT-on (honest)      — per-date S&P 500 membership (filter_panel_to_pit).
-  2. Survivor-snapshot    — restrict to the CURRENT roster (members_on_date at
-                            the panel's last date), used across ALL history.
-                            This is the genuinely survivorship-biased arm.
-  3. All-available        — all 701 names whenever they have data (no membership
-                            filter). What load_panel(pit_filter=False) literally
-                            does; includes failed names while they traded.
+Models (each on its own headline panel; HPs held fixed across arms so the only
+thing varying is the universe — re-tuning per arm would conflate HP-selection
+with survivorship):
+  - Lasso-6 / Ridge-6  : 6-feature rank panel, CV-selected regularization.
+  - LightGBM (rank-9)  : 9-feature rank panel, HPs from the held-out Optuna config
+                         (lightgbm_rank9_h21_hp_pre20241231.yaml).
 
-Features are rebuilt per arm so cross-sectional rank-normalization matches each
-arm's own universe. Same walk-forward recipe as lasso_elasso_pit_h21
-(rank-normalized, h=21, embargo 22d, refit 252d, min_train 504d).
+Reports gross IC / t / Sharpe + 20 bp net on the 2025+ test slice; survivorship
+inflation = (survivor OOS) − (PIT-on OOS), per model, for IC and Sharpe.
 
-  delta = (survivor-snapshot IC) - (PIT-on IC)  == the headline model's own
-  survivorship-bias inflation, finally measured rather than extrapolated.
-
-Usage:
-    PYTHONPATH=src .venv/bin/python scripts/survivorship_ablation_headline.py
+Usage: PYTHONPATH=src .venv/bin/python scripts/survivorship_ablation_headline.py
 """
 
 from __future__ import annotations
 
+import warnings
 from datetime import date
 
 import polars as pl
+import yaml
 from rich.console import Console
 from rich.table import Table
 
 from price_model.data.loaders import load_panel
 from price_model.data.membership import filter_panel_to_pit, members_on_date
-from price_model.eval.metrics import summarize
+from price_model.eval.turnover import compute_turnover_and_costs
 from price_model.features.pipeline import build_feature_matrix, drop_warmup_rows
 from price_model.models import build_model
 from price_model.models.base import ModelConfig
 from price_model.pipeline.walk_forward import join_with_realized, run_walk_forward
 
-FEATS = [
-    "momentum_12_1", "momentum_756", "return_1d",
-    "vol_ewm_20", "idio_vol_20", "max_return_21d",
-    "distance_52w_high", "log_dollar_volume", "beta_60",
-]
-OOS_START = date(2025, 1, 2)
+FEATS6 = ["momentum_12_1", "momentum_756", "return_1d",
+          "vol_ewm_20", "distance_52w_high", "log_dollar_volume"]
+TRAIN_START, FIRST_REFIT, OOS_START = date(2022, 10, 10), date(2025, 1, 2), date(2025, 1, 1)
 
 
-def run_arm(name: str, raw: pl.DataFrame) -> dict:
-    matrix = build_feature_matrix(raw, feature_names=FEATS, normalize_kind="rank", target_horizon=21)
-    matrix = drop_warmup_rows(matrix, FEATS).sort(["ticker", "date"])
+def lgbm_spec() -> tuple:
+    cfg = yaml.safe_load(open("config/experiments/lightgbm_rank9_h21_hp_pre20241231.yaml"))
+    params = next(m["params"] for m in cfg["models"] if m["class"] == "LightGBMModel")
+    return ("LightGBM rank-9 (tuned)", list(cfg["features"]), cfg.get("normalize_kind", "rank"),
+            "LightGBMModel", params)
+
+
+def run_cell(spec: tuple, raw: pl.DataFrame) -> dict:
+    name, feats, norm, cls, params = spec
+    matrix = build_feature_matrix(raw, feats, norm, 21).pipe(drop_warmup_rows, feats).sort(["ticker", "date"])
     target = matrix.select("date", "ticker", "y")
-    model = build_model(
-        "LassoCrossSectional",
-        ModelConfig(model_id=f"surv_{name}", feature_cols=FEATS, params={"cv": 5}),
-    )
+    model = build_model(cls, ModelConfig(model_id="surv", feature_cols=tuple(feats), params=params))
     preds = run_walk_forward(
-        matrix, model=model, feature_cols=FEATS, target_col="y",
+        matrix, model=model, feature_cols=feats, target_col="y",
         experiment_id="surv_ablation", horizon_days=21,
-        refit_freq_days=252, embargo_days=22, min_train_days=504,
+        refit_freq_days=9999, embargo_days=33, min_train_days=504,
+        train_start=TRAIN_START, first_refit=FIRST_REFIT,
     )
-    joined = join_with_realized(preds, target)
-    full = summarize(joined, horizon_days=21)
-    oos = summarize(joined.filter(pl.col("date") >= OOS_START), horizon_days=21)
-    return {
-        "name": name,
-        "n_tickers": matrix["ticker"].n_unique(),
-        "full_ic": full.information_coefficient,
-        "oos_ic": oos.information_coefficient,
-        "oos_t": oos.ic_t_stat,
-        "oos_sharpe": oos.long_short_sharpe,
-    }
+    joined = join_with_realized(preds, target).filter(pl.col("date") >= OOS_START)
+    s = compute_turnover_and_costs(
+        joined.select("date", "ticker", "prediction", "realized"),
+        cost_bps=(3, 10, 20), horizon_days=21,
+    )
+    return {"tickers": joined["ticker"].n_unique(), "ic": s.gross_ic, "t": s.gross_ic_t_stat,
+            "sharpe": s.gross_long_short_sharpe, "turn": s.annual_turnover,
+            "net20": s.after_cost_sharpe_by_bp[20]}
 
 
 def main() -> None:
-    console = Console()
-    console.print("Loading full sp500_pit price panel (701 names, no membership filter)...")
+    warnings.filterwarnings("ignore")
+    con = Console()
+    con.print("Loading sp500_pit price panel (no membership filter)...")
     raw = load_panel(universe="sp500_pit", start="2017-01-01", pit_filter=False)
-    last_date = raw["date"].max()
-    current = members_on_date(last_date)
-    in_panel = set(raw["ticker"].unique().to_list())
-    current_in_panel = current & in_panel
-    console.print(
-        f"Panel: {len(in_panel)} tickers with data, last date {last_date}. "
-        f"Current roster on {last_date}: {len(current)} members ({len(current_in_panel)} have data).\n"
-    )
-
+    last = raw["date"].max()
+    current = members_on_date(last) & set(raw["ticker"].unique().to_list())
     arms = {
         "PIT-on (honest)": filter_panel_to_pit(raw),
-        "survivor-snapshot": raw.filter(pl.col("ticker").is_in(list(current_in_panel))),
+        "survivor-snapshot": raw.filter(pl.col("ticker").is_in(list(current))),
         "all-available": raw,
     }
+    models = [
+        ("Lasso-6", FEATS6, "rank", "LassoCrossSectional", {"cv": 5}),
+        ("Ridge-6", FEATS6, "rank", "RidgeCrossSectional", {"cv": 5}),
+        lgbm_spec(),
+    ]
 
-    results = []
-    for name, rawf in arms.items():
-        console.print(f"Running arm: {name} ...")
-        results.append(run_arm(name, rawf))
+    rows = {}
+    for spec in models:
+        mname = spec[0]
+        for aname, araw in arms.items():
+            con.print(f"  {mname}  ×  {aname} ...")
+            rows[(mname, aname)] = run_cell(spec, araw)
 
-    table = Table(title=f"Headline L1 survivorship ablation (same source; OOS = {OOS_START}+)")
-    table.add_column("arm", style="bold")
-    table.add_column("tickers", justify="right")
-    table.add_column("full-sample IC", justify="right")
-    table.add_column("OOS IC", justify="right")
-    table.add_column("OOS t", justify="right")
-    table.add_column("OOS Sharpe", justify="right")
-    for r in results:
-        table.add_row(
-            r["name"], str(r["n_tickers"]),
-            f"{r['full_ic']:+.4f}", f"{r['oos_ic']:+.4f}",
-            f"{r['oos_t']:+.2f}", f"{r['oos_sharpe']:+.2f}",
-        )
-    console.print(table)
+    t = Table(title="Survivorship ablation across models (regime-confined, test 2025+)")
+    for c in ("model", "arm", "tickers", "OOS IC", "t", "gross Sh", "ann.turn", "net@20"):
+        t.add_column(c, justify=("left" if c in ("model", "arm") else "right"))
+    for spec in models:
+        mname = spec[0]
+        for aname in arms:
+            r = rows[(mname, aname)]
+            t.add_row(mname, aname, str(r["tickers"]), f"{r['ic']:+.4f}", f"{r['t']:+.2f}",
+                      f"{r['sharpe']:+.2f}", f"{r['turn']:.0f}x", f"{r['net20']:+.2f}")
+        t.add_section()
+    con.print(t)
 
-    by = {r["name"]: r for r in results}
-    honest = by["PIT-on (honest)"]
-    surv = by["survivor-snapshot"]
-    for horizon, key in [("full-sample", "full_ic"), ("OOS 2025+", "oos_ic")]:
-        d = surv[key] - honest[key]
-        infl = (d / honest[key] * 100) if honest[key] else float("nan")
-        console.print(
-            f"\n[bold]{horizon} survivorship inflation[/bold] "
-            f"(survivor − honest): {surv[key]:+.4f} − {honest[key]:+.4f} = "
-            f"{d:+.4f}  ({infl:+.0f}%)"
-        )
+    con.print("\n[bold]Survivorship inflation (survivor − PIT-on):[/bold]")
+    for spec in models:
+        mname = spec[0]
+        h, s = rows[(mname, "PIT-on (honest)")], rows[(mname, "survivor-snapshot")]
+        con.print(f"  {mname:24s}  IC {s['ic'] - h['ic']:+.4f}  "
+                  f"({(s['ic'] - h['ic']) / h['ic'] * 100:+.0f}%)   "
+                  f"gross Sharpe {s['sharpe'] - h['sharpe']:+.2f}")
 
 
 if __name__ == "__main__":
