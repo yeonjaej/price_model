@@ -1,4 +1,4 @@
-experiment_id: extended_kaggle_v3_curated_h21_hp_pre20241231
+experiment_id: extended_kaggle_v3_xgboost_h21_hp_pre20241231
 data:
   universe: sp500_pit
   start: 2017-01-01
@@ -27,23 +27,23 @@ walk_forward:
   train_start: 2022-10-10
   first_refit: 2025-01-02
 models:
-- id: zero_v1_ohlcv_curated_h21
+- id: zero_v1_v3_xgboost_baseline_h21
   class: ZeroPredictor
   params: {}
-- id: lightgbm_kaggle_v3_curated_h21_hp_pre20241231
-  class: LightGBMModel
+- id: xgboost_v3_curated_h21_hp_pre20241231
+  class: XGBoostModel
   params:
-    learning_rate: 0.006406858593366109
-    num_leaves: 111
-    min_data_in_leaf: 474
-    feature_fraction: 0.8667859664667892
-    bagging_fraction: 0.6959962090775575
-    bagging_freq: 5
-    lambda_l1: 27.929673294228984
-    lambda_l2: 0.1418655914511316
-    n_estimators: 1036
+    learning_rate: 0.025444389393658423
+    max_depth: 4
+    min_child_weight: 79
+    subsample: 0.5987713471909832
+    colsample_bytree: 0.8780831665913638
+    reg_alpha: 0.18979628105709992
+    reg_lambda: 4.216437756635675
+    n_estimators: 1194
+    tree_method: hist
     val_fraction: 0.1
-    early_stopping_rounds: 100
+    early_stopping_rounds: 50
     seeds:
     - 42
     - 2024

@@ -1,0 +1,43 @@
+experiment_id: xgboost_rank9_h21_hp_pre20241231
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+features:
+- momentum_12_1
+- momentum_756
+- return_1d
+- vol_ewm_20
+- idio_vol_20
+- max_return_21d
+- distance_52w_high
+- log_dollar_volume
+- beta_60
+normalize_kind: rank
+target_horizon: 21
+walk_forward:
+  refit_freq_days: 9999
+  embargo_days: 33
+  min_train_days: 504
+  train_start: 2022-10-10
+  first_refit: 2025-01-02
+models:
+- id: zero_v1_rank9_xgb_baseline_h21
+  class: ZeroPredictor
+  params: {}
+- id: xgboost_rank9_h21_hp_pre20241231
+  class: XGBoostModel
+  params:
+    learning_rate: 0.007419029655011961
+    max_depth: 5
+    min_child_weight: 77
+    subsample: 0.5022451154407639
+    colsample_bytree: 0.6519712319816323
+    reg_alpha: 0.5039641398876781
+    reg_lambda: 1.1642314131379894
+    n_estimators: 444
+    tree_method: hist
+    seeds:
+    - 42
+    - 2024
+    - 12345
