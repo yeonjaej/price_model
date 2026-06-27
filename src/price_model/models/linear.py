@@ -69,16 +69,22 @@ from price_model.models.base import Model, load_config, save_config
 class LassoCrossSectional(Model):
     """Cross-sectional Lasso regression with cross-validated regularization.
 
-    Fits `sklearn.linear_model.LassoCV` on the pooled `(date, ticker)` feature
-    panel against `y` (forward excess return). The L1 penalty forces
-    sparsity; with cross-validated `α`, the model selects its own
-    regularization strength on each refit.
+    Fits a plain `sklearn.linear_model.Lasso` on the pooled `(date, ticker)`
+    feature panel against `y` (forward excess return). The L1 penalty forces
+    sparsity; `α` is chosen per refit by a **temporal, purged forward-chain CV
+    scored on per-date IC** — the same grader the tree sweeps use — then the
+    model is refit once on the full training block at the selected `α`.
 
     Parameters (via `config.params`):
 
-    - `alphas` (list of float, optional): grid of α values to search. If
-      None, sklearn's default geometric grid is used.
-    - `cv` (int, default 5): K-fold cross-validation folds for picking α.
+    - `alphas` (list of float, optional): explicit grid of α values to search.
+      If None, a data-driven log grid (sklearn's `alpha_max·eps … alpha_max`
+      convention) is generated; see `models/_cv.l1_alpha_grid`.
+    - `cv` (int, default 3): number of **purged, expanding-window, forward-chain**
+      CV folds for picking α, scored on **per-date IC** (temporal — see
+      `models/_cv.py`). NOT K-fold, NOT MSE.
+    - `cv_embargo` (int, default 21): unique trailing dates purged before each
+      validation fold; set ≥ the forward-return horizon so the label can't leak.
     - `max_iter` (int, default 5000): coordinate-descent iterations cap.
     - `tol` (float, default 1e-4): convergence tolerance.
     - `selection` (str, default "cyclic"): "cyclic" or "random" coordinate
@@ -98,14 +104,15 @@ class LassoCrossSectional(Model):
         self._feat_names: tuple[str, ...] = tuple(config.feature_cols)
 
     def _params(self) -> dict[str, Any]:
-        # sklearn 1.7+ deprecates `alphas=None` (the default geometric grid
-        # signal). Replace None with the explicit int 100 so we keep the same
-        # default behavior across versions without warnings.
+        # When `alphas` is unset, fit() generates a data-driven log grid with this
+        # many points (see models/_cv.l1_alpha_grid); IC-based selection does not
+        # need a fine grid, so 25 keeps the per-refit fold search fast.
         alphas_cfg = self.config.params.get("alphas")
-        alphas_resolved = 100 if alphas_cfg is None else alphas_cfg
+        alphas_resolved = 25 if alphas_cfg is None else alphas_cfg
         return {
             "alphas": alphas_resolved,
-            "cv": int(self.config.params.get("cv", 5)),
+            "n_splits": int(self.config.params.get("cv", 3)),
+            "cv_embargo": int(self.config.params.get("cv_embargo", 21)),
             "max_iter": int(self.config.params.get("max_iter", 5000)),
             "tol": float(self.config.params.get("tol", 1e-4)),
             "selection": str(self.config.params.get("selection", "cyclic")),
@@ -113,7 +120,9 @@ class LassoCrossSectional(Model):
         }
 
     def fit(self, panel: pl.DataFrame) -> None:
-        from sklearn.linear_model import LassoCV
+        from sklearn.linear_model import Lasso
+
+        from ._cv import l1_alpha_grid, purged_forward_chain_folds, select_alpha_by_ic
 
         feats = list(self.config.feature_cols)
         target = self.config.target_col
@@ -123,21 +132,37 @@ class LassoCrossSectional(Model):
 
         X = train.select(feats).to_numpy()
         y = train[target].to_numpy()
+        dates = train["date"].to_numpy()
         params = self._params()
 
-        model = LassoCV(
-            alphas=params["alphas"],
-            cv=params["cv"],
-            max_iter=params["max_iter"],
-            tol=params["tol"],
-            selection=params["selection"],
-            fit_intercept=params["fit_intercept"],
-            n_jobs=-1,
+        # α selected by a temporal, purged forward-chain CV scored on per-date IC —
+        # the SAME grader the tree sweeps use (not sklearn's non-temporal, MSE-path
+        # LassoCV). See models/_cv.py.
+        folds = purged_forward_chain_folds(
+            dates, n_splits=params["n_splits"], embargo=params["cv_embargo"]
         )
-        model.fit(X, y)
-        self._coef = np.asarray(model.coef_)
-        self._intercept = float(model.intercept_) if params["fit_intercept"] else 0.0
-        self._alpha = float(model.alpha_)
+        alphas = (
+            np.asarray(params["alphas"], dtype=float)
+            if isinstance(params["alphas"], (list, tuple, np.ndarray))
+            else l1_alpha_grid(X, y, n_alphas=int(params["alphas"]), l1_ratio=1.0)
+        )
+        common = {
+            "max_iter": params["max_iter"],
+            "tol": params["tol"],
+            "selection": params["selection"],
+            "fit_intercept": params["fit_intercept"],
+        }
+        best, _, _ = select_alpha_by_ic(
+            [{"alpha": float(a)} for a in alphas],
+            lambda p: Lasso(alpha=p["alpha"], **common),
+            X, y, dates, folds,
+            verbose=bool(self.config.params.get("verbose", False)),
+            label=self.config.model_id,
+        )
+        final = Lasso(alpha=best["alpha"], **common).fit(X, y)
+        self._coef = np.asarray(final.coef_)
+        self._intercept = float(final.intercept_) if params["fit_intercept"] else 0.0
+        self._alpha = float(best["alpha"])
         self._fitted = True
 
     def predict(self, panel: pl.DataFrame) -> pl.DataFrame:
@@ -193,8 +218,10 @@ class LassoCrossSectional(Model):
 class RidgeCrossSectional(Model):
     """Cross-sectional Ridge regression with cross-validated regularization.
 
-    Fits `sklearn.linear_model.RidgeCV` on the pooled `(date, ticker)` feature
-    panel against `y` (forward excess return). Unlike Lasso, the L2 penalty
+    Fits a plain `sklearn.linear_model.Ridge` on the pooled `(date, ticker)`
+    feature panel against `y` (forward excess return); `α` is chosen per refit by
+    a **temporal, purged forward-chain CV scored on per-date IC** (same grader as
+    Lasso and the tree sweeps), then refit once at the selected `α`. Unlike Lasso, the L2 penalty
     keeps every coefficient non-zero and shrinks them smoothly toward zero.
     Critical property on collinear panels: when two features are highly
     correlated, Ridge splits their weight proportionally rather than
@@ -203,10 +230,18 @@ class RidgeCrossSectional(Model):
 
     Parameters (via `config.params`):
 
-    - `alphas` (list of float, optional): grid of α values to search. If
-      None, sklearn's default `[0.1, 1.0, 10.0]` is used; we override to
-      a log-spaced 20-point grid spanning 1e-4 to 1e4 for finer resolution.
-    - `cv` (int, default 5): K-fold cross-validation folds for picking α.
+    - `alphas` (list of float, optional): explicit grid of α to search. If
+      None, fit() builds a **data-scaled** grid (`models/_cv.ridge_alpha_grid`):
+      ±4 decades around the mean Gram-matrix eigenvalue `trace(XᵀX)/p`, so the
+      grid spans effectively-OLS → heavily-shrunk regardless of feature scaling
+      or sample size. An int here sets the number of grid points (default 20).
+      (A fixed absolute grid like 1e-4…1e4 is mostly below the shrinkage scale
+      for a pooled fit and leaves nearly every point at OLS.)
+    - `cv` (int, default 3): number of **purged, expanding-window, forward-chain**
+      CV folds for picking α, scored on **per-date IC** (temporal — see
+      `models/_cv.py`). NOT K-fold, NOT MSE.
+    - `cv_embargo` (int, default 21): unique trailing dates purged before each
+      validation fold; set ≥ the forward-return horizon so the label can't leak.
     - `fit_intercept` (bool, default True): include an intercept (matches
       cross-sectional excess return target, which is zero-mean per date).
 
@@ -232,19 +267,24 @@ class RidgeCrossSectional(Model):
         self._feat_names: tuple[str, ...] = tuple(config.feature_cols)
 
     def _params(self) -> dict[str, Any]:
-        # sklearn's RidgeCV default alphas=[0.1, 1.0, 10.0] is too coarse
-        # for the magnitudes the project sees on z-scored features; use a
-        # finer log-spaced grid unless caller overrides.
+        # L2 has no finite alpha_max, so when `alphas` is unset fit() builds a
+        # DATA-SCALED grid (models/_cv.ridge_alpha_grid) anchored to the Gram-matrix
+        # eigenvalue scale; an int here is the number of grid points. A fixed
+        # absolute grid (e.g. 1e-4..1e4) is mostly below the shrinkage-relevant
+        # scale for a pooled ~50k-row fit, leaving nearly every point at OLS.
         alphas_cfg = self.config.params.get("alphas")
-        alphas_resolved = np.logspace(-4, 4, 20).tolist() if alphas_cfg is None else alphas_cfg
+        alphas_resolved = 20 if alphas_cfg is None else alphas_cfg
         return {
             "alphas": alphas_resolved,
-            "cv": int(self.config.params.get("cv", 5)),
+            "n_splits": int(self.config.params.get("cv", 3)),
+            "cv_embargo": int(self.config.params.get("cv_embargo", 21)),
             "fit_intercept": bool(self.config.params.get("fit_intercept", True)),
         }
 
     def fit(self, panel: pl.DataFrame) -> None:
-        from sklearn.linear_model import RidgeCV
+        from sklearn.linear_model import Ridge
+
+        from ._cv import purged_forward_chain_folds, ridge_alpha_grid, select_alpha_by_ic
 
         feats = list(self.config.feature_cols)
         target = self.config.target_col
@@ -254,20 +294,31 @@ class RidgeCrossSectional(Model):
 
         X = train.select(feats).to_numpy()
         y = train[target].to_numpy()
+        dates = train["date"].to_numpy()
         params = self._params()
 
-        # RidgeCV uses leave-one-out by default when cv is None; we pin
-        # cv=5 to match Lasso's setup so the comparison isolates the
-        # penalty type, not the cross-validation scheme.
-        model = RidgeCV(
-            alphas=params["alphas"],
-            cv=params["cv"],
-            fit_intercept=params["fit_intercept"],
+        # α selected by a temporal, purged forward-chain CV scored on per-date IC —
+        # the SAME grader as Lasso and the tree sweeps (not sklearn RidgeCV's
+        # non-temporal, MSE/R²-scored path). See models/_cv.py.
+        folds = purged_forward_chain_folds(
+            dates, n_splits=params["n_splits"], embargo=params["cv_embargo"]
         )
-        model.fit(X, y)
-        self._coef = np.asarray(model.coef_)
-        self._intercept = float(model.intercept_) if params["fit_intercept"] else 0.0
-        self._alpha = float(model.alpha_)
+        alphas = (
+            np.asarray(params["alphas"], dtype=float)
+            if isinstance(params["alphas"], (list, tuple, np.ndarray))
+            else ridge_alpha_grid(X, n_alphas=int(params["alphas"]))
+        )
+        best, _, _ = select_alpha_by_ic(
+            [{"alpha": float(a)} for a in alphas],
+            lambda p: Ridge(alpha=p["alpha"], fit_intercept=params["fit_intercept"]),
+            X, y, dates, folds,
+            verbose=bool(self.config.params.get("verbose", False)),
+            label=self.config.model_id,
+        )
+        final = Ridge(alpha=best["alpha"], fit_intercept=params["fit_intercept"]).fit(X, y)
+        self._coef = np.asarray(final.coef_)
+        self._intercept = float(final.intercept_) if params["fit_intercept"] else 0.0
+        self._alpha = float(best["alpha"])
         self._fitted = True
 
     def predict(self, panel: pl.DataFrame) -> pl.DataFrame:
@@ -320,11 +371,12 @@ class RidgeCrossSectional(Model):
 class ElasticNetCrossSectional(Model):
     """Cross-sectional ElasticNet regression with cross-validated regularization.
 
-    Fits `sklearn.linear_model.ElasticNetCV` on the pooled `(date, ticker)`
+    Fits a plain `sklearn.linear_model.ElasticNet` on the pooled `(date, ticker)`
     feature panel against `y` (forward excess return). The hybrid L1 + L2
     penalty interpolates between Lasso (l1_ratio=1) and Ridge (l1_ratio=0).
-    The CV jointly selects α (overall regularization strength) and
-    l1_ratio (mix between L1 and L2) per refit.
+    `(α, l1_ratio)` are jointly selected per refit by a **temporal, purged
+    forward-chain CV scored on per-date IC** (same grader as Lasso/Ridge and the
+    tree sweeps), then the model is refit once at the selected pair.
 
     Use case versus pure Lasso / Ridge
     ----------------------------------
@@ -346,7 +398,11 @@ class ElasticNetCrossSectional(Model):
       collapse to Ridge.
     - `alphas` (list of float, optional): grid of α values to search.
       Default: sklearn's data-driven geometric grid (n_alphas=100).
-    - `cv` (int, default 5): K-fold cross-validation folds.
+    - `cv` (int, default 3): number of **purged, expanding-window, forward-chain**
+      CV folds for jointly picking α and l1_ratio, scored on **per-date IC**
+      (temporal — see `models/_cv.py`). NOT K-fold, NOT MSE.
+    - `cv_embargo` (int, default 21): unique trailing dates purged before each
+      validation fold; set ≥ the forward-return horizon so the label can't leak.
     - `max_iter` (int, default 5000): coordinate-descent iterations cap.
     - `tol` (float, default 1e-4): convergence tolerance.
     - `selection` (str, default "cyclic"): "cyclic" or "random" coordinate
@@ -366,10 +422,11 @@ class ElasticNetCrossSectional(Model):
         self._feat_names: tuple[str, ...] = tuple(config.feature_cols)
 
     def _params(self) -> dict[str, Any]:
-        # sklearn 1.7+ deprecates `alphas=None`. Replace with explicit int 100
-        # to preserve the default geometric grid without warnings.
+        # When `alphas` is unset, fit() generates a per-l1_ratio data-driven log
+        # grid with this many points (see models/_cv.l1_alpha_grid); 25 keeps the
+        # joint (alpha, l1_ratio) IC search tractable.
         alphas_cfg = self.config.params.get("alphas")
-        alphas_resolved = 100 if alphas_cfg is None else alphas_cfg
+        alphas_resolved = 25 if alphas_cfg is None else alphas_cfg
         l1_ratios_cfg = self.config.params.get("l1_ratios")
         l1_ratios_resolved = (
             [0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0] if l1_ratios_cfg is None else l1_ratios_cfg
@@ -377,7 +434,8 @@ class ElasticNetCrossSectional(Model):
         return {
             "alphas": alphas_resolved,
             "l1_ratios": l1_ratios_resolved,
-            "cv": int(self.config.params.get("cv", 5)),
+            "n_splits": int(self.config.params.get("cv", 3)),
+            "cv_embargo": int(self.config.params.get("cv_embargo", 21)),
             "max_iter": int(self.config.params.get("max_iter", 5000)),
             "tol": float(self.config.params.get("tol", 1e-4)),
             "selection": str(self.config.params.get("selection", "cyclic")),
@@ -385,7 +443,9 @@ class ElasticNetCrossSectional(Model):
         }
 
     def fit(self, panel: pl.DataFrame) -> None:
-        from sklearn.linear_model import ElasticNetCV
+        from sklearn.linear_model import ElasticNet
+
+        from ._cv import l1_alpha_grid, purged_forward_chain_folds, select_alpha_by_ic
 
         feats = list(self.config.feature_cols)
         target = self.config.target_col
@@ -395,23 +455,42 @@ class ElasticNetCrossSectional(Model):
 
         X = train.select(feats).to_numpy()
         y = train[target].to_numpy()
+        dates = train["date"].to_numpy()
         params = self._params()
 
-        model = ElasticNetCV(
-            l1_ratio=params["l1_ratios"],
-            alphas=params["alphas"],
-            cv=params["cv"],
-            max_iter=params["max_iter"],
-            tol=params["tol"],
-            selection=params["selection"],
-            fit_intercept=params["fit_intercept"],
-            n_jobs=-1,
+        # (α, l1_ratio) jointly selected by a temporal, purged forward-chain CV
+        # scored on per-date IC — the SAME grader as Lasso/Ridge and the tree
+        # sweeps (not sklearn ElasticNetCV's non-temporal, MSE path). See _cv.py.
+        folds = purged_forward_chain_folds(
+            dates, n_splits=params["n_splits"], embargo=params["cv_embargo"]
         )
-        model.fit(X, y)
-        self._coef = np.asarray(model.coef_)
-        self._intercept = float(model.intercept_) if params["fit_intercept"] else 0.0
-        self._alpha = float(model.alpha_)
-        self._l1_ratio = float(model.l1_ratio_)
+        explicit_alphas = isinstance(params["alphas"], (list, tuple, np.ndarray))
+        candidates: list[dict] = []
+        for l1 in params["l1_ratios"]:
+            alphas = (
+                np.asarray(params["alphas"], dtype=float)
+                if explicit_alphas
+                else l1_alpha_grid(X, y, n_alphas=int(params["alphas"]), l1_ratio=float(l1))
+            )
+            candidates.extend({"alpha": float(a), "l1_ratio": float(l1)} for a in alphas)
+        common = {
+            "max_iter": params["max_iter"],
+            "tol": params["tol"],
+            "selection": params["selection"],
+            "fit_intercept": params["fit_intercept"],
+        }
+        best, _, _ = select_alpha_by_ic(
+            candidates,
+            lambda p: ElasticNet(alpha=p["alpha"], l1_ratio=p["l1_ratio"], **common),
+            X, y, dates, folds,
+            verbose=bool(self.config.params.get("verbose", False)),
+            label=self.config.model_id,
+        )
+        final = ElasticNet(alpha=best["alpha"], l1_ratio=best["l1_ratio"], **common).fit(X, y)
+        self._coef = np.asarray(final.coef_)
+        self._intercept = float(final.intercept_) if params["fit_intercept"] else 0.0
+        self._alpha = float(best["alpha"])
+        self._l1_ratio = float(best["l1_ratio"])
         self._fitted = True
 
     def predict(self, panel: pl.DataFrame) -> pl.DataFrame:
@@ -470,6 +549,87 @@ class ElasticNetCrossSectional(Model):
         m._intercept = state["intercept"]
         m._alpha = state["alpha"]
         m._l1_ratio = state["l1_ratio"]
+        m._feat_names = state["feat_names"]
+        m._fitted = True
+        return m
+
+
+class OLSCrossSectional(Model):
+    """Cross-sectional ordinary least squares — the unregularized linear baseline.
+
+    Plain `sklearn.linear_model.LinearRegression` on the pooled `(date, ticker)`
+    feature panel against `y` (forward excess return). No penalty, no
+    cross-validation, no hyperparameter.
+
+    Why it exists: on a small curated panel with a large pooled sample the Gram
+    matrix `XᵀX` is extremely well-conditioned (this project's headline: ~238k
+    rows × 6 features), so regularization is unnecessary — the IC-scored forward-
+    chain CV drives both Lasso and Ridge to α→0, i.e. they *reduce to this model*.
+    OLS makes that explicit and removes the (inactive) penalty. On this panel
+    `OLSCrossSectional`, `LassoCrossSectional`, and `RidgeCrossSectional` produce
+    the same predictions to within selection noise; OLS is the honest headline.
+
+    Parameters (via `config.params`):
+
+    - `fit_intercept` (bool, default True): include an intercept (the
+      cross-sectional excess-return target is ~zero-mean per date).
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self._coef: np.ndarray | None = None
+        self._intercept: float | None = None
+        self._feat_names: tuple[str, ...] = tuple(config.feature_cols)
+
+    def fit(self, panel: pl.DataFrame) -> None:
+        from sklearn.linear_model import LinearRegression
+
+        feats = list(self.config.feature_cols)
+        target = self.config.target_col
+        train = panel.drop_nulls(subset=[target, *feats])
+        if train.height == 0:
+            raise ValueError("No training rows after dropping nulls — check warmup/embargo.")
+
+        X = train.select(feats).to_numpy()
+        y = train[target].to_numpy()
+        fit_intercept = bool(self.config.params.get("fit_intercept", True))
+        model = LinearRegression(fit_intercept=fit_intercept).fit(X, y)
+        self._coef = np.asarray(model.coef_)
+        self._intercept = float(model.intercept_) if fit_intercept else 0.0
+        self._fitted = True
+
+    def predict(self, panel: pl.DataFrame) -> pl.DataFrame:
+        self._check_fitted()
+        if self._coef is None:
+            raise RuntimeError("OLSCrossSectional has no fitted coefficients")
+        feats = list(self.config.feature_cols)
+        X = panel.select(feats).fill_null(0.0).to_numpy()
+        preds = X @ self._coef + (self._intercept or 0.0)
+        return self._format_predictions(panel, preds)
+
+    def feature_importance(self) -> dict[str, float]:
+        """Coefficient magnitude per feature. Sign-preserved (dense — no shrinkage)."""
+        self._check_fitted()
+        if self._coef is None:
+            raise RuntimeError("OLSCrossSectional has no fitted coefficients")
+        return dict(zip(self._feat_names, [float(c) for c in self._coef], strict=True))
+
+    def save(self, path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+        save_config(self.config, path / "config.json")
+        with (path / "state.pkl").open("wb") as f:
+            pickle.dump(
+                {"coef": self._coef, "intercept": self._intercept, "feat_names": self._feat_names},
+                f,
+            )
+
+    @classmethod
+    def load(cls, path: Path) -> OLSCrossSectional:
+        m = cls(load_config(path / "config.json"))
+        with (path / "state.pkl").open("rb") as f:
+            state = pickle.load(f)
+        m._coef = state["coef"]
+        m._intercept = state["intercept"]
         m._feat_names = state["feat_names"]
         m._fitted = True
         return m

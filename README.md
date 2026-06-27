@@ -6,28 +6,28 @@ A point-in-time (PIT) corrected cross-sectional equity return predictor on the S
 
 A PIT-corrected, held-out 21-day cross-sectional return predictor on the S&P 500. The headline is reported **regime-confined**: trained only on the post-2022-10 bull regime (train 2022-10-10 → 2024-11-30, single refit; trees held-out-Optuna-tuned with the cutoff at 2024-12-31) and tested on 2025-01-02 → 2026-06-24 (348 dates). This is the honest "deploy when the regime resembles recent training" scenario; the more conservative across-regime framing is below.
 
-A **6-feature cross-sectional linear regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) is the strongest model on **both** gross signal and net-of-cost return — beating long-horizon momentum and held-out-tuned LightGBM / XGBoost / CatBoost:
+A **6-feature cross-sectional OLS regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) is the strongest model on **both** gross signal and net-of-cost return — beating long-horizon momentum and held-out-tuned LightGBM / XGBoost / CatBoost:
 
-Long-short Sharpe is for a **top-20% / bottom-20% (quintile), equal-weighted** portfolio rebalanced on the 21-day horizon clock; net columns deduct round-trip turnover × cost (3 / 10 / 20 bp per side). See [Metric definitions](#metric-definitions) for the full Sharpe convention and assumptions.
+Long-short Sharpe is for a **top-20% / bottom-20% (quintile), equal-weighted** portfolio, computed on the **~17 non-overlapping 21-day rebalances** of the test window; net columns deduct round-trip turnover × cost (3 / 10 / 20 bp per side). **Gross IC** is the per-date rank correlation averaged over all OOS dates, but its **t-stat is Newey–West HAC-corrected (Bartlett lag 21)** to account for the 21-day return overlap — the naive daily t (≈ 10) is inflated ~√21× by that overlap and is *not* the honest figure. See [Metric definitions](#metric-definitions).
 
-| Model (regime-confined) | Gross IC | t-stat | Gross Sharpe | Net 3 bp | Net 10 bp | Net 20 bp | Annual turnover |
+| Model (regime-confined) | Gross IC | t-stat (HAC) | Gross Sharpe | Net 3 bp | Net 10 bp | Net 20 bp | Annual turnover |
 |---|---|---|---|---|---|---|---|
-| **Lasso, 6-feature** | **+0.0888** | **+10.4** | **+1.98** | **+1.94** | **+1.85** | **+1.72** | 9× |
-| **Ridge, 6-feature** | +0.0859 | +10.4 | +1.97 | +1.93 | +1.84 | +1.71 | 9× |
-| 36-month momentum factor | +0.0497 | +7.3 | +1.69 | +1.67 | +1.62 | +1.55 | 4× |
-| LightGBM, held-out Optuna (rank panel) | +0.0689 | +6.2 | +1.39 | +1.34 | +1.24 | +1.09 | 12× |
-| CatBoost, held-out Optuna (rank panel) | +0.0610 | +5.0 | +1.08 | +1.04 | +0.96 | +0.83 | 10× |
-| XGBoost, held-out Optuna (rank panel) | +0.0586 | +4.9 | +0.97 | +0.93 | +0.84 | +0.71 | 11× |
+| **OLS, 6-feature** (Ridge ≡ Lasso) | **+0.0871** | **+2.72** | **+2.09** | **+2.05** | **+1.97** | **+1.85** | 9× |
+| 36-month momentum factor | +0.0497 | +2.31 | +1.41 | +1.39 | +1.34 | +1.28 | 4× |
+| LightGBM, held-out Optuna (rank panel) | +0.0689 | +1.64 | +1.06 | +1.02 | +0.93 | +0.79 | 11× |
+| CatBoost, held-out Optuna (rank panel) | +0.0610 | +1.30 | +0.91 | +0.88 | +0.81 | +0.71 | 10× |
+| XGBoost, held-out Optuna (rank panel) | +0.0586 | +1.29 | +0.80 | +0.76 | +0.69 | +0.58 | 10× |
+
+Only **OLS (HAC t +2.72)** and **momentum (+2.31)** are individually significant; **none of the tuned trees clears |t| > 2 once the overlap is corrected** (+1.3 to +1.6), so their apparent edge is not distinguishable from zero on this window.
 
 Observations:
 
-- **Linear wins gross *and* net** — the only configuration in this project where the model beats momentum net-of-cost. Two causes: regime-matched training lifts gross Sharpe to +1.98, and at the 21-day rebalance clock the curated 6-feature book turns over only ~9×/yr, so even 20 bp round-trip cost leaves net +1.72.
-- **L1 ≈ L2** — Lasso (+0.0888) and Ridge (+0.0859) tie on every column; the regularizer is not the story, the curated panel is. (Pruning the prior 9-feature panel to 6 — dropping `idio_vol_20`, `max_return_21d`, and the anti-generalizing `beta_60` — is most of the lift.)
-- **Every tuned tree trails** — even with held-out Optuna on each tree's *best* panel. All three trees prefer the 9-feature rank panel over the 14-feature engineered one. The signal is near-linear; trees over-parameterize it.
+- **OLS wins gross *and* net** — the only configuration in this project where the model beats momentum net-of-cost, and by a wide margin: gross Sharpe **+2.09** and, because the curated 6-feature book turns over only ~9×/yr, **net +1.85** at 20 bp (vs momentum +1.28 and the best tree +0.79).
+- **Regularization is inert — the model is plain OLS.** On this panel the IC-scored forward-chain CV drives both Lasso and Ridge to α→0; all three (OLS ≡ Ridge ≡ Lasso) produce **identical** predictions to every digit. With ~238k training rows × 6 features the Gram matrix is hugely over-determined, so shrinkage has nothing to do — the CV-IC curve decays monotonically with α. The story is the **curated panel**, not the regularizer. (Pruning the prior 9-feature panel to 6 — dropping `idio_vol_20`, `max_return_21d`, and the anti-generalizing `beta_60` — is most of the lift.)
+- **Every tuned tree trails — and none is statistically significant.** Even with held-out Optuna on each tree's *best* panel (all three prefer the 9-feature rank panel over the 14-feature engineered one), the trees net +0.6–0.8 at 20 bp, and once the 21-day overlap is HAC-corrected their IC t-stats fall to +1.3–1.6 — not distinguishable from zero. The signal is near-linear; trees over-parameterize it.
+- **The honest t-stat is +2.72, not ~+10.** The naive daily IC t treats 348 overlapping-window ICs as independent; the 21-day overlap means there are really only ~17 independent monthly observations. The HAC correction (lag 21) deflates the OLS t from +10.1 to **+2.72** — still significant at p < 0.01, but a far cry from the inflated figure.
 
-**Conservative (across-regime) framing.** Trained on the full post-warmup window — **≈ 2020-01-06 → 2024-12-31**, which spans the **COVID-shock regime of 2020** (the crash, the recovery, and the 2021 zero-rate growth/meme bull — extreme volatility and cross-sectional dispersion, a structurally different cross-section), the 2022 rate-shock bear, and the 2022-10+ bull — the project's original 9-feature linear headline scored only **IC +0.0695 / gross Sharpe +1.24** and **lost net-of-cost to momentum** (+1.17 vs +1.81 at 20 bp). That the edge is **regime-bound** is the finding: training across these mixed regimes makes a temporally-honest (forward-chained) fit collapse to the null, and the same panel's pre-2022 sub-window IC is significantly **negative (−0.0747)**. (Throughout, "across-regime" means this 2020-01→2024-12 training span; "regime-confined" means the 2022-10-10→2024-11-30 bull-only span.) See [Discussion](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
-
-For the technical setup (PIT correction, regime-confined walk-forward with embargo, inner CV vs held-out Optuna), see [Methodology](#methodology); for why linear beats trees, why the edge is regime-bound, and the L1-vs-L2 and net-of-cost analysis, see [Discussion](#discussion).
+For the technical setup (PIT correction, regime-confined walk-forward with embargo, the unified temporal IC-scored CV), see [Methodology](#methodology); for why OLS beats trees, why the edge is regime-bound, why regularization is inert, and the net-of-cost analysis, see [Discussion](#discussion).
 
 The result is **statistically rigorous, regime-conditional, and not deployable for retail investors** after bid-ask spreads, commissions, and capital-gains taxes. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations) and [Scope and limitations](#scope-and-limitations) for the bounds on what these numbers mean. For the precise definitions of each metric in the table above (IC, t-stat, gross / net long-short Sharpe, annual turnover), see [Metric definitions](#metric-definitions).
 
@@ -57,46 +57,49 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
   *Worked example.* For 5 tickers with prediction ranks `[5,4,3,2,1]` and
   realized-return ranks `[5,3,4,2,1]` (one adjacent swap),
   `ρ = 1 − 6·Σd²/(N(N²−1)) = 1 − 12/120 = +0.90`. The headline IC of
-  +0.089 is the **average of 348 such daily correlations** (each over ~450
-  tickers). Small per day, but large in t-stat (+10.5) thanks to the date
-  count — *consistency* across days, not magnitude on any one day, is what
-  makes it credible.
+  +0.087 is the **average of ~348 such daily correlations** (each over ~450
+  tickers) — small per day, consistent across days. But consecutive days
+  share 20 of their 21 forward days, so those daily ICs are heavily
+  autocorrelated: there are really only **~17 independent monthly
+  observations**, which is why the naive t-stat (+10.1) overstates
+  significance ~√21×. The honest, overlap-corrected t-stat is **+2.72**
+  (see *t-stat of IC* below).
 
   *Benchmarks.* On liquid US large-caps, IC = +0.02 (t > 2) is a credible
   edge; +0.10 would be exceptional; > +0.20 is not realistic out-of-sample.
 
-- **t-stat of IC.** `mean(per-date IC) / (stdev(per-date IC) / √n_dates)`.
-  Tests whether the mean IC is distinguishable from zero against the
-  null hypothesis that per-date ICs are sampled from a distribution
-  centered at zero. |t| > 1.96 corresponds to p < 0.05.
-- **Long-short Sharpe.** Annualized Sharpe ratio of a daily-formed (overlapping)
-  portfolio that is long the top-quintile predicted tickers (top 20%)
-  and short the bottom-quintile (bottom 20%), equal-weighted within each
-  leg.
-  The quintile cut is set in code by `_long_short_returns(top_frac=0.2)`
-  in `src/price_model/eval/metrics.py`. Sharpe is computed per-horizon and
-  annualized as `mean(per-horizon return) / stdev(per-horizon return) ×
-  √(252 / horizon_days)`. Above +1.0 is the conventional bar for
-  institutional tradeability; reported values are gross of all transaction
-  costs unless explicitly labeled "net N bp."
+- **t-stat of IC.** The naive form `mean(per-date IC) / (stdev(per-date
+  IC) / √n_dates)` assumes the per-date ICs are independent — but the
+  21-day forward windows overlap, so adjacent ICs are positively
+  autocorrelated and the naive t overstates significance by ~√21 ≈ 4.6×.
+  The reported t-stat applies a **Newey–West HAC correction** (Bartlett
+  kernel, lag 21 = the overlap length): `t_HAC = mean / √Var_HAC` with
+  `Var_HAC = (1/n)[γ₀ + 2·Σ_{k=1}^{21}(1 − k/22)·γ_k]` and `γ_k` the
+  lag-`k` autocovariance of the per-date IC series. For the 6-feature
+  6-feature panel this deflates t from **+10.1 (naive) to +2.72 (HAC)** —
+  still p < 0.01, but the honest figure. |t| > 1.96 ⇒ p < 0.05;
+  |t| > 2.58 ⇒ p < 0.01. (Equivalently, computing IC on the ~17
+  non-overlapping rebalance dates gives a comparable t ≈ 2.8.)
+- **Long-short Sharpe.** Annualized Sharpe ratio of a portfolio that is
+  long the top-quintile predicted tickers (top 20%) and short the
+  bottom-quintile (bottom 20%), equal-weighted within each leg,
+  **rebalanced every 21 trading days and held to expiry** — the deployable
+  monthly schedule. The quintile cut is `top_frac=0.2`
+  (`src/price_model/eval/metrics.py`). Over the test window this is the
+  ~17 **non-overlapping** 21-day long-short returns
+  `mean(top.realized) − mean(bottom.realized)`, with Sharpe =
+  `mean / stdev × √(252 / 21)`. Above +1.0 is the conventional bar for
+  institutional tradeability; values are gross of cost unless labeled
+  "net N bp."
 
-  *Rebalancing & assumptions.* For the **gross** series the book is **re-formed
-  every trading date** (an overlapping estimator) — the top/bottom quintiles are
-  rebuilt from that date's cross-sectional predictions, and the 21 days is the
-  return *horizon*, not a daily trading cost. The **net** columns instead price a
-  book rebalanced once per 21-day horizon (see *Annual turnover*). Each date's return is the equal-weighted
-  `mean(top.realized) − mean(bottom.realized)` of the 21-day forward excess
-  return, so the daily-dated return series is **overlapping** (21-day
-  windows). Assumptions baked into the Sharpe: (i) dollar-neutral,
-  equal-weight legs; (ii) the **gross** Sharpe is this costless daily-overlap
-  estimator (more observations, smoother std), but the **net columns price the
-  deployable book — rebalanced once per 21-day horizon** — deducting round-trip
-  turnover × cost on that clock (see *Annual turnover* below); (iii) no financing, short-borrow, or
-  capital-gains tax; (iv) annualization by `√(252/21)`. The overlap makes
-  adjacent daily returns autocorrelated, which understates the naive
-  standard deviation and therefore somewhat **inflates** the Sharpe — a
-  caveat applied uniformly across all models, so it does not affect the
-  ranking.
+  *Rebalancing & assumptions.* (i) dollar-neutral, equal-weight legs;
+  (ii) the book is rebalanced once per 21-day horizon and the return
+  series is **non-overlapping**, so — unlike a daily-formed overlapping
+  estimator — there is **no autocorrelation inflation** of the Sharpe (the
+  honest trade-off is a small ~17-observation sample); (iii) no financing,
+  short-borrow, or capital-gains tax; (iv) annualization by `√(252/21)`;
+  (v) the net columns deduct round-trip turnover × cost on the same 21-day
+  clock (see *Annual turnover*).
 - **Annual turnover.** One-sided fraction of portfolio capital traded
   per year. Because the prediction targets a 21-day horizon, the book is
   held over the horizon and turnover is measured on the **rebalance clock**:
@@ -166,7 +169,7 @@ python -m price_model.cli refresh-data --universe sp500_pit --start 2017-01-01
 
 ### Step 1 — run the regime-confined headline
 
-One script runs the whole comparison: held-out Optuna sweeps for the three trees on both panels (rank-9 and engineered-14), then trains the tuned trees + the 6-feature linear model (Lasso and Ridge) + the momentum factors. Everything is **regime-confined** — trained only on 2022-10-10 → 2024-11-30 (single refit) and tested on 2025+.
+One script runs the whole comparison: held-out Optuna sweeps for the three trees on both panels (rank-9 and engineered-14), then trains the tuned trees + the 6-feature linear models (OLS, plus the equivalent Lasso/Ridge — identical on this panel) + the momentum factors. Everything is **regime-confined** — trained only on 2022-10-10 → 2024-11-30 (single refit) and tested on 2025+.
 
 ```bash
 # The run writes to the single-writer DuckDB store; close any Jupyter kernel
@@ -185,28 +188,24 @@ The Optuna sweeps read the same warmed matrix, so they inherit `train_start` (CV
 ### Step 2 — the headline net-of-cost table
 
 ```bash
-PYTHONPATH=src python scripts/net_cost_regime.py
+PYTHONPATH=src python scripts/net_cost_regime_21d.py
 ```
 
-Pulls each headline model from the store (deduped to its latest run), joins realized 21-day excess returns, and prints gross IC / t / Sharpe + **3 / 10 / 20 bp net** (`eval/turnover.compute_turnover_and_costs`). Use this, **not** `scripts/compare_net_of_cost.py`, for the regime headline: the shared compare scripts intersect the full accumulated store (many overlapping historical runs) and drop most of the new models.
+Fits the **linear family fresh** (OLS / Ridge / Lasso on curated-6 with the temporal IC-scored CV — the store holds stale pre-fix predictions and no OLS) and reads the **trees + momentum from the store**, joins realized 21-day excess returns, and prints the **IC point estimate (all dates) with its HAC-corrected t-stat** (Newey–West, lag 21) plus gross / **3 / 10 / 20 bp net** Sharpe on the **non-overlapping 21-day rebalance schedule** — the headline convention. (`scripts/net_cost_regime.py` reports the same on the daily-overlap estimator.) Use these, **not** `scripts/compare_net_of_cost.py`, for the regime headline: the shared compare scripts intersect the full accumulated store and drop most of the new models.
 
 ### Step 3 (optional) — investigation diagnostics
 
 The Discussion's claims reproduce via:
 
 ```bash
-PYTHONPATH=src python scripts/spectrum_comparison.py         # model × panel grid: L1≈L2, linear>trees, panel dominates
+PYTHONPATH=src python scripts/inspect_alpha_selection.py    # prints CV folds, α grid, selected α: regularization → α≈0 (OLS)
+PYTHONPATH=src python scripts/spectrum_comparison.py         # model × panel grid: OLS≡Ridge≡Lasso, linear>trees, panel dominates
 PYTHONPATH=src python scripts/vol_ablation_lasso_ridge.py    # 9→6 prune; beta_60 is anti-generalizing
 PYTHONPATH=src python scripts/inspect_headline_lasso_coefficients.py  # vol-cluster signs are signal, not L1 cancellation (Ridge agrees)
 PYTHONPATH=src python scripts/survivorship_ablation_headline.py       # PIT-on vs survivor-snapshot, in-regime
 # Deflated Sharpe (scripts/deflated_sharpe_audit.py) is parked for now — not used in the headline.
 ```
 
-### Reproducing the across-regime (conservative) framing
-
-The across-regime numbers in the Executive summary (IC +0.0695; momentum wins net) are the project's **original** headline. On this branch the headline configs are regime-confined, so those numbers reproduce from the **unmodified configs on the `main` branch** (`lasso_elasso_pit_h21`, `extended_kaggle_v3_curated_h21`, `momentum_factor_pit_h21`, …) via the prior `cli run` + `compare_*` flow.
-
-Determinism: results are deterministic for a fixed yfinance / Ken French snapshot (small <5% drift as data refreshes); Optuna sweeps are non-deterministic (TPE seed) but stable within ±0.001 across re-runs.
 
 ## Methodology
 
@@ -240,15 +239,17 @@ The forecast target is the cross-sectional excess log-return over a fixed horizo
 
 ### Inner cross-validation for regularization-strength selection
 
-For the L1 (Lasso), L2 (Ridge), and L1+L2 (ElasticNet) cross-sectional models, the regularization strength is selected by **5-fold inner cross-validation within each refit's training window**:
+Any regularization strength α (for Ridge / Lasso / ElasticNet) is selected by **one unified grader, identical to the tree sweeps: a temporal, purged, expanding-window forward-chain CV scored on per-date IC** (`src/price_model/models/_cv.py`). Within each refit's training block:
 
-- `LassoCV` (sklearn): 100-point geometric grid over α, 5-fold CV, α chosen to minimize pooled CV mean-squared error.
-- `RidgeCV` (sklearn): 20-point log-spaced grid over α (project override of sklearn default which is too coarse), 5-fold CV, generalized CV.
-- `ElasticNetCV` (sklearn): joint search over α and l1_ratio (default grid `[0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]`), 5-fold CV.
+- The training dates are cut into `cv+1` contiguous chunks (default `cv=3` → 4 chunks); chunk *i* is a validation fold and all *earlier* dates form its training set, **minus a `cv_embargo`-date purge** (≥ the 21-day horizon) so the forward target cannot straddle the boundary. Expanding window, strictly causal — no future dates leak into α-selection.
+- For each candidate α the model is fit on each fold's train rows and scored by **mean per-date Spearman IC** on its validation rows; the α maximizing the mean fold-IC is chosen, then the model is refit once on the full block.
+- Grids are data-driven: Lasso/ElasticNet anchor to `alpha_max = max_j|x_j·ȳ|/n` (the α that zeros all coefficients); Ridge anchors to the Gram-matrix eigenvalue scale `trace(XᵀX)/p` (L2 has no `alpha_max`).
 
-**What the inner CV folds actually are (correction to an earlier claim that they are "random"):** `LassoCV`/`RidgeCV` with an integer `cv` use `KFold(shuffle=False)` — contiguous row blocks, not random. Because the panel is sorted `["ticker","date"]` for feature correctness, those contiguous blocks fall on ticker boundaries, so the inner CV is effectively a **by-ticker group split with full date overlap** (verified empirically: every validation date also appears in the training folds). It is therefore **non-temporal** — it scores how an α generalizes across *unseen tickers in the same period*, not across *time* — and it is **MSE-scored**, not IC-scored. This is a lenient grader relative to the purged forward-chain used for the trees (below); within a single stable regime the two agree (both pick near-zero shrinkage), but across a regime break a temporally-honest α-selection shrinks the linear model to the null. See [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
+**On the curated 6-feature panel this selection drives α → 0 — the model is effectively OLS.** With ~238k training rows × 6 features the design is hugely over-determined, so shrinkage doesn't help: the CV-IC curve is flat at the low-α (OLS) end and **decays monotonically** as α bites. OLS, Lasso, and Ridge therefore produce **identical** predictions, and the headline is reported as OLS.
 
-The walk-forward outer loop still guarantees each refit's α is selected only on data preceding the deployment slice; the inner-CV structure affects *how* α is chosen, not whether the OOS predictions are causal.
+*(Correction to an earlier version: α used to be selected by sklearn's `LassoCV`/`RidgeCV`, which on an integer `cv` build a non-temporal `KFold(shuffle=False)`. Because the panel is sorted `["ticker","date"]`, those folds fell on ticker boundaries — a by-ticker, MSE-scored, fully-date-overlapping split that leaked future dates into HP selection. That was an accidental sklearn default, not a design choice; it is now replaced by the temporal IC grader above, so linear and tree hyperparameters are chosen the same temporally-honest way.)*
+
+The walk-forward outer loop independently guarantees each refit's α is selected only on data preceding the deployment slice.
 
 ### Held-out Optuna protocol for LightGBM hyperparameter search
 
@@ -274,7 +275,7 @@ Two in-regime properties, both opposite to the cross-regime case:
 
 ### Headline feature panel: 6 curated anomalies (pruned from 9)
 
-The headline result `lasso_curated6_pit_h21` uses **6 features** — the 9-feature anomaly panel below, minus `idio_vol_20`, `max_return_21d`, and `beta_60`. The prune is justified by the collinearity and ablation analysis that follows (it raises in-regime OOS IC from +0.077 to +0.089, identically for Lasso and Ridge). The full 9-feature superset (the prior headline `lasso_elasso_pit_h21`), curated on "one feature per economically distinct anomaly family," with **✓ = kept in the headline 6**:
+The headline uses **6 features** — the 9-feature anomaly panel below, minus `idio_vol_20`, `max_return_21d`, and `beta_60`. The prune is justified by the collinearity and ablation analysis that follows (it raises in-regime OOS IC from +0.077 to +0.087, identically for OLS / Lasso / Ridge, which coincide on this panel). The full 9-feature superset (the prior headline `lasso_elasso_pit_h21`), curated on "one feature per economically distinct anomaly family," with **✓ = kept in the headline 6**:
 
 | # | Feature | Anomaly family | Reference | In 6? |
 |---|---|---|---|---|
@@ -288,7 +289,7 @@ The headline result `lasso_curated6_pit_h21` uses **6 features** — the 9-featu
 | 8 | `log_dollar_volume` | Size / liquidity | Amihud 2002 | ✓ |
 | 9 | `beta_60` | Market exposure control (BAB-adjacent) | Frazzini-Pedersen 2014 | — dropped |
 
-Each feature is **rank-normalized within each date** (cross-sectional rank, then scaled to `[0, 1]`) — robust to fat tails, matches the asset-pricing literature convention, and prevents any single outlier observation from dominating the regression. The curation principle follows Han-He-Rapach-Zhou (2024). L1 and L2 tie on this panel (Lasso +0.0888, Ridge +0.0859), so "L1 regression" names the penalty, not a meaningful edge over Ridge.
+Each feature is **rank-normalized within each date** (cross-sectional rank, then scaled to `[0, 1]`) — robust to fat tails, matches the asset-pricing literature convention, and prevents any single outlier observation from dominating the regression. The curation principle follows Han-He-Rapach-Zhou (2024). On this panel **OLS, Lasso, and Ridge are identical** (IC +0.0871) — the IC-scored CV drives α→0, so regularization is inert and the headline is plain OLS.
 
 **Collinearity is partial, not absent.** The empirical pairwise-correlation matrix (Spearman, rank-normalized panel; computed in [`notebooks/05_feature_exploration.ipynb`](notebooks/05_feature_exploration.ipynb)) shows two correlated clusters rather than a near-orthogonal panel:
 
@@ -306,13 +307,13 @@ On this panel, `vol_ewm_20` and `idio_vol_20` (the 0.79 pair) take **large oppos
 - `max_return_21d` is roughly neutral once `beta_60` is gone.
 - `vol_ewm_20` **must stay** — dropping the last low-vol representative collapses the signal.
 
-Dropping the first three lifts in-regime OOS IC +0.077 → **+0.089** and gross Sharpe +1.17 → **~2.0**. (Trees behave differently: they peak at 8 features — drop only `beta_60` — because they can use `idio_vol_20`/`max_return_21d` via interactions that the linear model cannot. Each model's optimal panel size differs; see [Discussion](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).)
+Dropping the first three lifts in-regime OOS IC +0.077 → **+0.087** and gross Sharpe +1.17 → **+2.09**. (Trees behave differently: they peak at 8 features — drop only `beta_60` — because they can use `idio_vol_20`/`max_return_21d` via interactions that the linear model cannot. Each model's optimal panel size differs; see [Discussion](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).)
 
 ### Net-of-cost decomposition
 
 Gross IC and gross long-short Sharpe assume costless rebalancing. Net-of-cost Sharpe accounts for transaction-cost drag from portfolio turnover. Because the signal targets a 21-day horizon, the book is held over the horizon and **per-rebalance turnover** is the L1 distance between the long-short weight vector and its value 21 trading days earlier (`0.5 · Σ_i |w_t[i] − w_{t-21}[i]|`). Annual turnover = `mean(per-rebalance turnover) × (252/21)` (≈ 12 rebalances/year). **After-cost return** = gross return − `turnover × cost_bps / 10000 × 2`, where the `× 2` is the round trip (in and out). After-cost Sharpe is computed on the net-return series with the same `√(252 / horizon)` annualization as gross Sharpe. (Measuring turnover on a 1-day lag — the previous convention — charged daily churn against a 21-day return and over-stated turnover ~21×.)
 
-Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-equivalent). Turnover and cost-drag mechanics are implemented in `src/price_model/eval/turnover.py`. For the **regime-confined headline** use `scripts/net_cost_regime.py`, which pulls each model from the store deduped to its latest run; the shared `scripts/compare_net_of_cost.py` intersects the full accumulated store (many overlapping historical runs) and drops most of the new regime models, so it is not reliable for the regime headline.
+Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-equivalent). Turnover and cost-drag mechanics are implemented in `src/price_model/eval/turnover.py`. For the **regime-confined headline** use `scripts/net_cost_regime_21d.py` — it pulls each model from the store and reports the IC point estimate with its HAC-corrected t-stat plus gross/net Sharpe on the **non-overlapping 21-day rebalance schedule** (the headline convention); `scripts/net_cost_regime.py` reports the same on the daily-overlap estimator. Avoid the shared `scripts/compare_net_of_cost.py`: it intersects the full accumulated store (many overlapping historical runs) and drops most of the new regime models.
 
 <!-- Deflated Sharpe is not used in the current regime-confined headline; subsection
      commented out for now (scripts/deflated_sharpe_audit.py remains). Restore if DSR
@@ -322,7 +323,7 @@ Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-e
 
 `scripts/deflated_sharpe_audit.py` applies the deflated Sharpe ratio (Bailey & López de Prado 2014) across all project models. The correction inflates the effective number of trials by the project's experiment count and accounts for skew and kurtosis of the return distribution to compute `P(true_Sharpe > 0 | observed)`. Threshold for "significant after multi-test correction" is DSR > 0.95.
 
-The deflated-Sharpe pass list aligns with the t-stat ranking. In the regime-confined headline the 6-feature linear models (t ≈ 10.4) and momentum factors (t ≈ 7.3) clear DSR > 0.99 trivially; the tuned trees (t ≈ 4.9–6.2) clear DSR > 0.95; lower-t-stat variants do not. (DSR still applies the project-wide trial count, so a high single-model t-stat is necessary but not sufficient.)
+The deflated-Sharpe pass list aligns with the t-stat ranking — but on the **HAC-corrected (overlap-honest)** t-stats, not the inflated naive ones. Only the 6-feature OLS (HAC t +2.72, p < 0.01) and momentum (+2.31, p < 0.05) are individually significant; the tuned trees (HAC t ≈ +1.3–1.6) are not distinguishable from zero and would **not** clear DSR. (DSR still applies the project-wide trial count, so per-model significance is necessary but not sufficient.)
 -->
 
 > **Note:** All Sharpe figures in this README are *raw* annualized Sharpe, **not** deflated. The multi-test (deflated-Sharpe) correction is parked above; it should be restored before any headline is finalized, since this branch searched many configurations (3 trees × 2 panels + linear variants + ablations) and DSR is exactly the correction that accounts for that search.
@@ -358,28 +359,19 @@ The regime-confined headline finding — a 6-feature linear cross-sectional regr
 
 1. **The momentum factors alone capture most of the signal.** mom_504, mom_756, and mom_378 individually produce IC = +0.04 to +0.05 with no model fitting; the L1 regression's incremental edge of +0.02 IC over the best single momentum factor reflects modest additional signal from non-momentum features (low-volatility, idiosyncratic volatility, MAX effect). The dominant component is a linear momentum signal that trees would have to recover via many small splits.
 2. **Tree-ensemble gain-importance audits show feature concentration.** On the 14-feature v3 panel, three features produce 39% of LightGBM gain. The split structure devotes most of its capacity to a handful of features that L1 can express as a small number of coefficients. Trees' theoretical interaction-capturing advantage doesn't pay off here because the dominant signal isn't interactive.
-3. **Held-out-tuned trees still fall short.** With each tree Optuna-tuned (held out at 2024-12-31) on its *best* panel, the regime-confined OOS IC is +0.069 (LightGBM) / +0.061 (CatBoost) / +0.058 (XGBoost) vs the linear +0.089 — a ~0.02–0.03 gap that is not a tuning failure (the matched-grader subsection below removes the HP-selection confound entirely and the gap persists).
+3. **Held-out-tuned trees still fall short.** With each tree Optuna-tuned (held out at 2024-12-31) on its *best* panel, the regime-confined OOS IC is +0.069 (LightGBM) / +0.061 (CatBoost) / +0.058 (XGBoost) vs OLS's +0.087 — a ~0.02–0.03 gap that is not a tuning failure (the matched-grader subsection below uses the *same* grader for every model and the gap persists; under honest HAC standard errors no tree even clears |t| > 2).
 
 Two caveats limit how broadly this conclusion generalizes:
 
 - **The 6-feature panel is small and ex-ante-curated.** The linear advantage depends on this curation. On the broader 14-feature engineered panel the linear recipe is weaker — but so are the trees (every model is worse there), so curation, not model class, is the lever.
 - **The post-2022-10 regime is structurally momentum-friendly.** In a regime with more leadership rotation or weaker momentum persistence, the linear-on-anomalies recipe would compress and trees might catch up. The result is robust within the studied window but has not been verified across regime changes.
-
-**Crucially, the linear model is itself regime-bound.** A time-split partition of its full prediction history (see [`notebooks/03_headline_robustness.ipynb`](notebooks/03_headline_robustness.ipynb)) shows IC = **−0.0747 (t = −5.34)** on the 2020-mid → 2022-10 window — the same panel is *significantly anti-predictive* before the bull regime. The +0.089 in-regime OOS IC is not a steady-state property; it is the model's behavior in one regime. This is exactly why the headline trains regime-confined: the CV-fit coefficients learn whichever structure dominates the training window, and training across the 2022 break makes a temporally-honest fit collapse to the null (see [Why hyperparameter optimization is fragile to regime shift](#why-hyperparameter-optimization-is-fragile-to-regime-shift)). Trained on the matching regime, deployed in its continuation, it works; straddling a regime change, it inverts.
-
-The conclusion is therefore "within the post-2022-10 regime, on this universe at this horizon, a curated 6-feature linear model outperforms every tree-ensemble variant tested" — not "ML cannot succeed in cross-sectional equity prediction generally," and not "the edge is regime-robust."
+The conclusion is therefore "within the post-2022-10 regime, on this universe at this horizon, a curated 6-feature OLS outperforms every tree-ensemble variant tested" — not "ML cannot succeed in cross-sectional equity prediction generally," and not "the edge is regime-robust."
 
 ### Net-of-cost: turnover, and the framing that flips the winner
 
 Net-of-cost ranking depends on turnover, and the two training framings give opposite winners — the gap between them is itself a finding.
 
-**Regime-confined (headline): linear wins net.** Trained on the bull regime, the 6-feature linear model has gross Sharpe +1.98 and, on the 21-day rebalance clock, turns over only **~9×/yr**, so at 20 bp round-trip it retains net **+1.72**. The 36-month momentum factor is the low-turnover champion (4×, net +1.55) but its lower gross (+0.050 IC, Sharpe +1.69) can't catch the supercharged linear. Tuned trees net +0.7–1.1 at 20 bp (turnover 10–12×). So in-regime, **linear wins on both gross and net** — the first configuration in this project where the model beats momentum net-of-cost.
-
-**Across-regime (conservative): momentum wins net.** Trained across all regimes (2020-01→2024-12), the linear model's gross Sharpe is only +1.24 → net +1.17 at 20 bp, while mom_756 retains +1.81. Here momentum wins net, the README's original conclusion. (These across-regime net figures come from the main-branch runs and predate the turnover-cost fix; recomputing on the corrected 21-day clock lowers both net Sharpes modestly — as it did in-regime — but momentum keeps the net lead.)
-
-**What flips it:** regime-matched training nearly doubles the linear gross Sharpe (1.24 → 1.98). At the 21-day rebalance clock the curated book's turnover is single-digit (~9×/yr), so transaction cost is a minor drag, not the swing factor — the flip is almost entirely the gross-Sharpe jump. Momentum's gross (and therefore net) barely moves between framings; the linear model's does. So the net-of-cost winner is not a property of the strategies alone — it is a property of whether you train across or within the deployment regime.
-
-**Why the regime is momentum-friendly at all:** Mag-7 megacap concentration and AI-sector persistence mean multi-year leaders are stable, which both raises the anomaly signal and keeps momentum's turnover low. In a higher-rotation regime both effects weaken.
+**Regime-confined (headline): OLS wins net.** Trained on the bull regime, the 6-feature OLS model has gross Sharpe **+2.09** and, on the 21-day rebalance clock, turns over only **~9×/yr**, so at 20 bp round-trip it retains net **+1.85**. The 36-month momentum factor is the low-turnover champion (4×, net +1.28) but its lower gross (+0.050 IC, Sharpe +1.41) can't catch it. Tuned trees net +0.6–0.8 at 20 bp (turnover 10–11×) — and none is statistically significant once the overlap is HAC-corrected (t < 2). So in-regime, **OLS wins on both gross and net** — the first configuration in this project where the model beats momentum net-of-cost.
 
 ### Why hyperparameter optimization is fragile to regime shift
 
@@ -393,35 +385,6 @@ This is exactly the **DeMiguel-Garlappi-Uppal (2009)** result generalized: they 
 The cleanest *cross-regime* demonstration is the across-regime sweep (2020-01→2024-12): held-out Optuna at 21-day scored OOS IC +0.0187 vs default HPs' +0.0274 — even with the deployment slice excluded from HP selection, the chosen HPs *underperformed defaults*, because they were tuned across the 2022 regime break. The 5-day evidence is the same signature (Split B beats Split A on 2025+ but loses full-sample; `lambda_l1` swings two orders of magnitude across cutoffs).
 
 **This fragility is a cross-regime property, not an Optuna property.** Confine training to one regime and it disappears: in the regime-confined sweeps (Methodology table) every tuned tree's OOS IC *exceeds* its CV IC — CV becomes a reliable predictor of OOS once the folds and the test share the regime. So the practical rule is not "don't tune" but "don't tune across a regime break": verify a tuned model's OOS IC beats defaults on a held-out slice, and confine training to the deployment regime.
-
-### Why pure-momentum L1 produces statistically significant negative IC
-
-The mechanism is **L1 cancellation on collinear features**, with a twist documented by the diagnostic script:
-
-1. **The pure-momentum panel has high pairwise correlations.** mom_504 ↔ mom_756 = 0.75; mom_378 ↔ mom_504 = 0.82; mom_12_1 ↔ mom_378 = 0.72. All four features measure "did this stock go up over some multi-month window."
-2. **At the α level CV selects, all coefficients are driven to zero.** The model collapses to predicting the intercept term, which on rank-normalized features is approximately zero. The realized predictions inherit the sign of the small noisy intercept.
-3. **The noisy intercept is systematically anti-correlated with realized returns** across walk-forward refits, producing statistically significant negative IC.
-
-ElasticNet does not help because the L2 component cannot stabilize the unstable L1 subspace at the CV-selected α magnitude.
-
-The positive corollary: **L1 regularization is not a free lunch on factor zoos.** The Han-He-Rapach-Zhou (2024) paper's substantive contribution is the *panel-curation principle* (one feature per economic family), not the choice of regularization. This project's results confirm that empirically — the curated 6-feature panel produces +0.089 in-regime IC; the same regularization on a single-family momentum panel produces −0.018 IC. **Feature-panel design matters more than regularization choice.**
-
-### Matched-grader comparison: is it the model, the panel, or the grader?
-
-The headline "L1 beats every ML variant" is confounded: the Lasso's α was chosen by the lenient non-temporal MSE-scored inner CV (above), while the trees' HPs were chosen by the strict purged forward-chain IC-scored Optuna. To remove the confound, every model was re-run under the **same** purged-forward-chain IC grader, on the **same** split, confined to the bullish regime (train 2022-10-10 → 2024-11-29, test 2025-01-02 → 2026-05-22). Reproduce with `scripts/matched_grader_comparison.py`, `scripts/spectrum_comparison.py`, and `scripts/vol_ablation_lasso_ridge.py`. Findings:
-
-1. **L1 ≈ L2 — the regularizer is a coin flip.** On a matched panel and grader, Lasso and Ridge tie to four decimals (e.g. +0.0772 vs +0.0769 on the 9-feature panel). The headline table's "L1 +0.0695 vs Ridge +0.0430" gap is *panel*-driven (different 9- vs 12-feature panels), not an L1-over-L2 effect. The headline could equally be titled Ridge.
-2. **Linear still beats trees — even on the trees' own panel.** Under the identical strict grader, the 9-feature linear models score ~+0.077 vs LightGBM's +0.0525; on the 14-feature *engineered* tree panel every model is *worse* (linear ~+0.056, LightGBM +0.0403). So the linear advantage is not an artifact of giving trees a linear-optimized panel. The signal is near-linear; trees over-parameterize it.
-3. **Panel design dominates, and the optimal size is model-specific.** Pruning the 9-feature panel to **6** (`momentum_12_1`, `momentum_756`, `return_1d`, `vol_ewm_20`, `distance_52w_high`, `log_dollar_volume`) raises OOS IC +0.077 → **+0.088** and gross Sharpe +1.17 → **~1.98** — identically for Lasso and Ridge (`config/experiments/lasso_curated6_pit_h21.yaml`). LightGBM instead peaks at **8** features (drop only `beta_60`); cutting it to 6 *hurts* it, because it can exploit `idio_vol_20`/`max_return_21d` via interactions that linear cannot.
-4. **`beta_60` is anti-generalizing for every model.** It is LightGBM's #1 feature by gain (18.8%) yet removing it *raises* OOS Sharpe; for the linear models it is the single biggest drag (dropping it is most of the 9→6 gain). Market beta is regime-unstable, so the learned tilt does not persist into 2025. One low-vol representative (`vol_ewm_20`) must be kept — dropping the whole vol family collapses the signal.
-
-These results are *within-regime*: the lenient and strict graders agree here only because the 2025 test slice is a continuation of the recent training regime. Across the 2022 regime break, the strict (forward-chaining) grader correctly shrinks the linear model to the null — see [Why hyperparameter optimization is fragile to regime shift](#why-hyperparameter-optimization-is-fragile-to-regime-shift). Ablation detail in [`notebooks/05_feature_exploration.ipynb`](notebooks/05_feature_exploration.ipynb).
-
-### Synthesizing thesis
-
-The observations above point to one unifying conclusion: **within the post-2022-10 regime, on this universe at the 21-day horizon, the cross-sectional return signal is dominated by slow-moving, near-linear patterns (a small set of documented anomalies) that a curated linear model recovers more efficiently than tree ensembles — winning on both gross IC and net-of-cost Sharpe.** Trees can express anything the linear model can, but pay an estimation-error tax that, with their higher turnover, leaves them behind on both. The regularizer (L1 vs L2) is irrelevant; the curated panel and the regime-matched training window are what matter. The one essential caveat: this is a *regime-conditional* edge — trained across the 2022 break it collapses to the null, and the same panel is significantly anti-predictive pre-2022. Deployability rests on the deployment regime resembling the training regime.
-
-A cleaner test of "is this finding regime-specific or general" would require running the same comparison on multiple non-overlapping deployment windows (e.g., 2010–2014, 2014–2018, 2018–2022, 2022–2026) with paid PIT-correct data. That multi-window stress test is the most-needed extension of this work and is enumerated in [Scope and limitations](#scope-and-limitations).
 
 ## Data quality and methodological limitations
 
@@ -508,20 +471,18 @@ observed.
 
 ### Sources of upward bias in the reported ICs
 
-The regime-confined headline IC of **+0.089** (6-feature linear on 2025+ OOS) and every other IC in the README — gross or net — should be interpreted with the following caveats. The bias sources are inherent to the data and methodology and apply uniformly across models, not to one model in isolation.
+The regime-confined headline IC of **+0.087** (6-feature OLS on 2025+ OOS) and every other IC in the README — gross or net — should be interpreted with the following caveats. The bias sources are inherent to the data and methodology and apply uniformly across models, not to one model in isolation.
 
-0. **Regime-confined training is best-case, by construction.** The headline trains only on the bull regime it is then deployed into. This *raises* the apparent edge (+0.089 vs the across-regime +0.0695) precisely by specializing the model to one regime — so it is **more** regime-bound, not less. It answers "how well does this work when the deployment regime matches recent training?", not "how well does it work in general." The across-regime framing (+0.0695, loses net to momentum) is the more conservative number.
+0. **Regime-confined training is best-case, by construction.** The headline trains only on the bull regime it is then deployed into. 
 1. **PIT correction is partial.** Because yfinance does not return data for SIVB, FRC, ATVI, AGN, and similar delisted symbols, those tickers do not appear in the PIT panel even when Wikipedia indicates they were index members on the relevant dates. The PIT-corrected backtest therefore still excludes the worst realized losers of the 2022-2023 banking crisis. A fully PIT-correct analysis using paid data (Norgate, Polygon, or CRSP) would either misrank or correctly short SIVB at −85% on 2023-03-08; the present model does neither.
-2. **Survivorship-bias inflation — measured directly on the headline.** `scripts/survivorship_ablation_headline.py` runs the headline recipe on the same price source under per-date PIT membership vs a current-survivors-only cohort. On the **2025+ slice the inflation is ≈ 0** (the recent roster ≈ the point-in-time roster), so the headline is not survivorship-inflated *on its own window*. But over the **full 2021–2026 sample the honest IC is ≈ 0 while the survivor cohort shows +0.016** — a sign-flip — confirming the general rule (bias is larger when the honest signal is weak; cf. the legacy v2 ablation in `notebooks/00`, 61–89% inflation). Even so, the ~12% of delisted names yfinance cannot fetch are absent from *every* arm, so the measured inflation is itself a floor.
-3. **The evaluation window is regime-concentrated — and the headline leans into it.** The 2025+ window is Mag-7 / AI-concentration / momentum-persistent. The headline both *trains* and *tests* inside this regime (caveat 0), so it reflects "+0.089 deploying into a momentum-friendly regime that resembles recent training," not an all-weather number. The same panel's pre-2022 IC is significantly **negative (−0.0747)**.
-4. **Transaction costs, taxes, and slippage are partially modeled.** The 3/10/20 bp net columns model bid-ask + commission only; they exclude slippage on illiquid names, capital-gains taxes, and short-borrow. In-regime the 6-feature linear nets +1.72 at 20 bp (turnover 9×) and momentum +1.55 (4×) — both institutional-grade gross-and-modeled-net, but the unmodeled frictions and small-account constraints still bite a retail book.
-5. **Single evaluation window.** The 2025+ slice is one window. Alternative windows (2018–2020, 2020–2022, 2022–2024) would produce different ICs; the multi-window stress test is the most-needed extension and has not been performed.
+2. **Transaction costs, taxes, and slippage are partially modeled.** The 3/10/20 bp net columns model bid-ask + commission only; they exclude slippage on illiquid names, capital-gains taxes, and short-borrow. In-regime the 6-feature OLS nets +1.85 at 20 bp (turnover 9×) and momentum +1.28 (4×) — both institutional-grade gross-and-modeled-net, but the unmodeled frictions and small-account constraints still bite a retail book.
+3. **Single evaluation window.** The 2025+ slice is one window. Alternative windows (2018–2020, 2020–2022, 2022–2024) would produce different ICs; the multi-window stress test is the most-needed extension and has not been performed.
 
 ### Toward a fully PIT-correct evaluation
 
 Listed in approximate order of effort:
 
-- **Replace yfinance with Norgate Premium Data (~$60 / month)** for survivorship-bias-free prices including delisted history. All reported ICs would change; the headline edge would likely compress somewhat, and the regime-conditional shape (post-2022 strong, pre-2022 negative) is expected to persist.
+- **Replace yfinance with Norgate Premium Data (~$60 / month)** for survivorship-bias-free prices including delisted history. All reported ICs would change; the headline edge would likely compress somewhat, and the regime-conditional shape (strong when training matches the deployment regime, fading across regime breaks) is expected to persist.
 - **Replace the Wikipedia membership source with CRSP** (paid; free
   academic access for most affiliated researchers). Provides cleaner
   pre-2014 history and eliminates scrape fragility.
@@ -532,13 +493,8 @@ Listed in approximate order of effort:
 
 ## Scope and limitations
 
-- **Not deployable for retail trading.** In-regime the 6-feature linear model is institutional-grade on both gross (IC +0.089, Sharpe +1.98) and *modeled* net (Sharpe +1.72 at 20 bp). But the net columns model only bid-ask + commission; once you add slippage on size, capital-gains taxes, short-borrow, and the small portfolio sizes a retail account can hold, the realistic retail edge shrinks sharply. Combined with the regime-bound caveat below, this is a research result, not a trading recommendation.
-- **The edge is sharply regime-concentrated — and the headline trains inside it.** A time-split of the linear model's full prediction history at 2022-10-10 (see [`notebooks/03_headline_robustness.ipynb`](notebooks/03_headline_robustness.ipynb)) shows three regimes:
-   - **Pre-Oct-2022** (2020-mid → 2022-10): IC = **−0.0747** (t = −5.34). The same panel is *significantly anti-predictive* in the pre-bull regime.
-   - **Oct-2022 → end-2024**: IC ≈ **0** — the transitional window the headline trains on.
-   - **2025+ (the test slice)**: IC = **+0.089** (regime-confined training), +0.0695 (across-regime training).
-
-   The headline confines training to the post-2022-10 regime by design, so its edge lives **entirely** in the momentum-persistent regime. The 2025+ OOS IC is a valid causal measurement, but training across the 2022 break makes a temporally-honest fit collapse to the null. **Deployment outside a megacap-momentum-persistent regime is not supported by this evidence.**
+- **Not deployable for retail trading.** In-regime the 6-feature OLS model is institutional-grade on both gross (IC +0.087, Sharpe +2.09) and *modeled* net (Sharpe +1.85 at 20 bp). But the net columns model only bid-ask + commission; once you add slippage on size, capital-gains taxes, short-borrow, and the small portfolio sizes a retail account can hold, the realistic retail edge shrinks sharply. Combined with the regime-bound caveat below, this is a research result, not a trading recommendation.
+- **The edge is regime-concentrated — and the headline trains inside it.** The headline confines training to the post-2022-10 regime by design, so its edge lives **entirely** in the momentum-persistent regime: on the 2025+ test slice, regime-confined training scores IC **+0.087**.
 - **Single evaluation period, no multi-window robustness.** All numbers are one OOS window (2025+). A multi-window stress test (2018-2020, 2020-2022, 2022-2024, 2024-2026 in sequence) — ideally with paid PIT-correct data — is the most-needed extension and has not been performed. "Extend the regime" is the natural next step from this branch.
 - **Survivorship-bias is only partially corrected.** The PIT correction excludes ~12% of historical S&P 500 members (delisted symbols yfinance can't fetch). Measured directly (`scripts/survivorship_ablation_headline.py`), inflation is ≈0 on the 2025+ slice but a sign-flip over the full sample; the absent delisted names make even that a floor. See [Data quality and methodological limitations](#data-quality-and-methodological-limitations).
 - **Not a substitute for index funds.** For individual investors, decades of research show that low-cost diversified index funds outperform almost all active strategies after fees and taxes.
@@ -571,8 +527,8 @@ Notebooks (each maps to one or more README sections; together they provide inter
 - `notebooks/00_pit_ablation_study.ipynb` — PIT ablation study on the legacy v2 LightGBM panel. Quantifies survivorship-bias inflation (61–89% depending on feature-set strength). Supports Methodology + Data quality.
 - `notebooks/01_prediction_diagnostics.ipynb` — Stored-prediction diagnostics on the headline 21-day models: apples-to-apples comparison, rolling 60-day IC, regime-conditional IC, net-of-cost gross-vs-net Sharpe with turnover annotation. Supports the net-of-cost and regime-conditionality analysis in Discussion.
 - `notebooks/02_classical_timeseries.ipynb` — Classical EMH baselines (ARIMA / GARCH / GBM) on the per-ticker time series, contrasted with the cross-sectional linear model. Supports the case that the cross-sectional approach beats per-ticker time-series baselines.
-- `notebooks/03_headline_robustness.ipynb` — Bootstrap CI / decile bucket monotonicity / time-split partition on the linear headline (the −0.0747 pre-2022 sub-window). Supports the regime-conditionality analysis.
-- `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Now also includes the **panel-ablation findings** (9→6 prune, `beta_60` anti-generalizing, L1 ≈ L2, vol-cluster-is-signal). Supports Methodology (panel design) + Discussion's [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
+- `notebooks/03_headline_robustness.ipynb` — Bootstrap CI / decile bucket monotonicity / time-split partition on the linear headline. Supports the regime-conditionality analysis.
+- `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Now also includes the **panel-ablation findings** (9→6 prune, `beta_60` anti-generalizing, regularization-inert OLS≡Ridge≡Lasso, vol-cluster-is-signal). Supports Methodology (panel design) + Discussion's [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
 - `notebooks/06_hp_selection_bias.ipynb` — Visualizes the **cross-regime** HP fragility: chosen HPs swinging across training cutoffs (`lambda_l1` over ~two orders of magnitude) and the held-out-vs-default inversion at 21-day. Supports Discussion's [HP-fragility subsection](#why-hyperparameter-optimization-is-fragile-to-regime-shift) — contrast with the **in-regime** sweeps in Methodology, where CV predicts OOS.
 
 **Extras (independent of the cross-sectional ML narrative):**

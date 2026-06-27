@@ -77,7 +77,7 @@ def main() -> None:
             continue
         model = build_model(
             "LassoCrossSectional",
-            ModelConfig(model_id="headline", feature_cols=FEATS, params={"cv": 5}),
+            ModelConfig(model_id="headline", feature_cols=FEATS, params={"cv": 3}),
         )
         model.fit(train)
         coefs = model.feature_importance()

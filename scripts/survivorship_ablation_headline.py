@@ -87,8 +87,8 @@ def main() -> None:
         "all-available": raw,
     }
     models = [
-        ("Lasso-6", FEATS6, "rank", "LassoCrossSectional", {"cv": 5}),
-        ("Ridge-6", FEATS6, "rank", "RidgeCrossSectional", {"cv": 5}),
+        ("Lasso-6", FEATS6, "rank", "LassoCrossSectional", {"cv": 3}),
+        ("Ridge-6", FEATS6, "rank", "RidgeCrossSectional", {"cv": 3}),
         lgbm_spec(),
     ]
 

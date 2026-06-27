@@ -86,8 +86,8 @@ def main() -> None:
                              train_start=TRAIN_START, first_refit=FIRST_REFIT)
         return join_with_realized(p, target).filter(pl.col("date") >= OOS)
 
-    con.print("Lasso-6 ..."); lasso = preds_for("LassoCrossSectional", {"cv": 5})
-    con.print("Ridge-6 ..."); ridge = preds_for("RidgeCrossSectional", {"cv": 5})
+    con.print("Lasso-6 ..."); lasso = preds_for("LassoCrossSectional", {"cv": 3})
+    con.print("Ridge-6 ..."); ridge = preds_for("RidgeCrossSectional", {"cv": 3})
     con.print("momentum_756 ...")
     mom = (m.filter(pl.col("date") >= OOS).select("date", "ticker", pl.col("momentum_756").alias("prediction"))
            .join(target.rename({"y": "realized"}), on=["date", "ticker"], how="left"))

@@ -50,7 +50,7 @@ def main() -> None:
 
     m = build_feature_matrix(raw, FEATS, "rank", 21).pipe(drop_warmup_rows, FEATS).sort(["ticker", "date"])
     target = m.select("date", "ticker", "y")
-    model = build_model("LassoCrossSectional", ModelConfig("x", tuple(FEATS), "y", {"cv": 5}))
+    model = build_model("LassoCrossSectional", ModelConfig("x", tuple(FEATS), "y", {"cv": 3}))
     p = run_walk_forward(m, model=model, feature_cols=FEATS, target_col="y", experiment_id="x",
                          horizon_days=21, refit_freq_days=9999, embargo_days=33, min_train_days=504,
                          train_start=TRAIN_START, first_refit=FIRST_REFIT)

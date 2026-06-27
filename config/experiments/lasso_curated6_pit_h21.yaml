@@ -64,10 +64,17 @@ models:
     class: ZeroPredictor
     params: {}
 
+  # OLS is the honest headline: on this 6-feature panel the IC-scored forward-chain
+  # CV drives Lasso/Ridge to alpha->0, so they reduce to plain OLS. No penalty, no CV.
+  - id: ols_curated6_pit_h21
+    class: OLSCrossSectional
+    params:
+      fit_intercept: true
+
   - id: lasso_curated6_pit_h21
     class: LassoCrossSectional
     params:
-      cv: 5
+      cv: 3
       max_iter: 5000
       tol: 1.0e-4
       selection: cyclic
@@ -79,5 +86,5 @@ models:
   - id: ridge_curated6_pit_h21
     class: RidgeCrossSectional
     params:
-      cv: 5
+      cv: 3
       fit_intercept: true

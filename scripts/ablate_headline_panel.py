@@ -52,7 +52,7 @@ def run_variant(matrix_full: pl.DataFrame, feats: list[str], target_full: pl.Dat
     sub = matrix_full.select(["date", "ticker", "adj_close", *feats]).drop_nulls(subset=feats)
     model = build_model(
         "LassoCrossSectional",
-        ModelConfig(model_id="ablate", feature_cols=feats, params={"cv": 5}),
+        ModelConfig(model_id="ablate", feature_cols=feats, params={"cv": 3}),
     )
     preds = run_walk_forward(
         sub.join(target_full, on=["date", "ticker"], how="left"),
@@ -97,7 +97,7 @@ def main() -> None:
         sub = matrix.select(["date", "ticker", *feats])
         model = build_model(
             "LassoCrossSectional",
-            ModelConfig(model_id="ablate", feature_cols=feats, params={"cv": 5}),
+            ModelConfig(model_id="ablate", feature_cols=feats, params={"cv": 3}),
         )
         preds = run_walk_forward(
             matrix, model=model, feature_cols=feats, target_col="y",
