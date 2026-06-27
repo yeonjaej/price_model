@@ -4,7 +4,7 @@ A point-in-time (PIT) corrected cross-sectional equity return predictor on the S
 
 ## Executive summary
 
-A PIT-corrected, held-out 21-day cross-sectional return predictor on the S&P 500. The headline is reported **regime-confined**: trained only on the post-2022-10 bull regime (train 2022-10-10 → 2024-11-30, single refit; trees held-out-Optuna-tuned with the cutoff at 2024-12-31) and tested on 2025-01-02 → 2026-06-24 (348 dates). This is the honest "deploy when the regime resembles recent training" scenario; the more conservative across-regime framing is below.
+A PIT-corrected, held-out 21-day cross-sectional return predictor on the S&P 500. The headline is reported **regime-confined**: trained only on the post-2022-10 bull regime (train 2022-10-10 → 2024-11-30, single refit; trees held-out-Optuna-tuned with the cutoff at 2024-12-31) and tested on 2025-01-02 → 2026-06-24 (348 dates). This is the honest "deploy when the regime resembles recent training" scenario; the expansion on longer time-scale across-regime is to be studied.
 
 A **6-feature cross-sectional OLS regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) is the strongest model on **both** gross signal and net-of-cost return — beating long-horizon momentum and held-out-tuned LightGBM / XGBoost / CatBoost:
 
@@ -268,10 +268,8 @@ The HP-selection bias correction is provided by the `--max-date` flag in `script
 | CatBoost | **rank-9** | +0.0513 | +0.0606 |
 | CatBoost | eng-14 | +0.0296 | +0.0499 |
 
-Two in-regime properties, both opposite to the cross-regime case:
 
 - **CV predicts OOS.** Every model's 2025+ OOS IC *exceeds* its CV IC (e.g. LightGBM 0.051 → 0.069) — no fragility penalty, because the CV folds and the test slice share the regime. The rank-9 panel wins CV for all three trees, so the panel choice is made honestly (on CV), not by peeking at OOS.
-- **No HP fragility within a regime.** The earlier across-regime sweeps (5-day) showed the opposite: `lambda_l1` swinging two orders of magnitude across training cutoffs and CV IC *failing* to predict OOS IC — the signature of HP optimization across a regime break. That fragility is a property of training across the 2022 break, not of Optuna; confining to one regime removes it. See [Discussion](#why-hyperparameter-optimization-is-fragile-to-regime-shift) and [`notebooks/06_hp_selection_bias.ipynb`](notebooks/06_hp_selection_bias.ipynb).
 
 ### Headline feature panel: 6 curated anomalies (pruned from 9)
 
@@ -288,26 +286,6 @@ The headline uses **6 features** — the 9-feature anomaly panel below, minus `i
 | 7 | `distance_52w_high` | 52-week-high anchoring | George-Hwang 2004 | ✓ |
 | 8 | `log_dollar_volume` | Size / liquidity | Amihud 2002 | ✓ |
 | 9 | `beta_60` | Market exposure control (BAB-adjacent) | Frazzini-Pedersen 2014 | — dropped |
-
-Each feature is **rank-normalized within each date** (cross-sectional rank, then scaled to `[0, 1]`) — robust to fat tails, matches the asset-pricing literature convention, and prevents any single outlier observation from dominating the regression. The curation principle follows Han-He-Rapach-Zhou (2024). On this panel **OLS, Lasso, and Ridge are identical** (IC +0.0871) — the IC-scored CV drives α→0, so regularization is inert and the headline is plain OLS.
-
-**Collinearity is partial, not absent.** The empirical pairwise-correlation matrix (Spearman, rank-normalized panel; computed in [`notebooks/05_feature_exploration.ipynb`](notebooks/05_feature_exploration.ipynb)) shows two correlated clusters rather than a near-orthogonal panel:
-
-- a **volatility/risk cluster** — `vol_ewm_20 ↔ idio_vol_20` = +0.79, `vol_ewm_20 ↔ max_return_21d` = +0.72, `vol_ewm_20 ↔ beta_60` = +0.61, `idio_vol_20 ↔ max_return_21d` = +0.62 (note features 4 and 5 are both Ang-Hodrick-Xing-Zhang 2006 — the same low-volatility family, so the "one feature per family" principle is not fully satisfied here);
-- a **trend cluster** — `momentum_12_1 ↔ distance_52w_high` = +0.58, `momentum_12_1 ↔ momentum_756` = +0.52, `momentum_756 ↔ distance_52w_high` = +0.46.
-
-The remaining ~25 of 36 pairs are below |0.3|, but the volatility cluster (0.6–0.79) sits inside the same danger band that produces L1 cancellation on the pure-momentum panel (0.75–0.82; see [Pure-momentum Lasso cancellation diagnostic](#pure-momentum-lasso-cancellation-diagnostic)), and would be flagged by the project's own redundancy auditor (`scripts/audit_lightgbm_features.py`, |corr| > 0.7).
-
-On this panel, `vol_ewm_20` and `idio_vol_20` (the 0.79 pair) take **large opposite-sign coefficients** (≈ +0.014 / −0.012) in the 2025+ refits. This *looks* like the L1 cancellation failure mode — but it is not. **Ridge, which has no cancellation mechanism, reproduces the same opposite signs** (≈ +0.011 / −0.019; see [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader)). The signs are the direction the *data* wants: the model is loading on `vol_ewm − idio_vol ≈ systematic (factor) volatility` — a real spread, not an artifact. (Contrast the pure-momentum panel below, where the features are *truly* redundant and the cancellation *is* pathological.) So the 9-feature panel is "mostly low-correlation with one genuinely collinear vol cluster that both L1 and L2 resolve into a signal-bearing spread," not near-orthogonal — and feature-panel design matters more than the regularizer.
-
-**Why the headline prunes to 6.** Single-feature ablation (`scripts/vol_ablation_lasso_ridge.py`, identical for Lasso and Ridge) decomposes the vol cluster:
-
-- `beta_60` is **anti-generalizing** — it is LightGBM's #1 feature by gain (18.8%) yet removing it *raises* OOS IC and Sharpe. Market beta is regime-unstable; the learned tilt does not persist into 2025. This is the bulk of the 9→6 improvement.
-- `idio_vol_20` is marginal — its `vol_ewm − idio_vol` spread is real but small, so dropping it costs almost nothing.
-- `max_return_21d` is roughly neutral once `beta_60` is gone.
-- `vol_ewm_20` **must stay** — dropping the last low-vol representative collapses the signal.
-
-Dropping the first three lifts in-regime OOS IC +0.077 → **+0.087** and gross Sharpe +1.17 → **+2.09**. (Trees behave differently: they peak at 8 features — drop only `beta_60` — because they can use `idio_vol_20`/`max_return_21d` via interactions that the linear model cannot. Each model's optimal panel size differs; see [Discussion](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).)
 
 ### Net-of-cost decomposition
 
@@ -326,26 +304,7 @@ Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-e
 The deflated-Sharpe pass list aligns with the t-stat ranking — but on the **HAC-corrected (overlap-honest)** t-stats, not the inflated naive ones. Only the 6-feature OLS (HAC t +2.72, p < 0.01) and momentum (+2.31, p < 0.05) are individually significant; the tuned trees (HAC t ≈ +1.3–1.6) are not distinguishable from zero and would **not** clear DSR. (DSR still applies the project-wide trial count, so per-model significance is necessary but not sufficient.)
 -->
 
-> **Note:** All Sharpe figures in this README are *raw* annualized Sharpe, **not** deflated. The multi-test (deflated-Sharpe) correction is parked above; it should be restored before any headline is finalized, since this branch searched many configurations (3 trees × 2 panels + linear variants + ablations) and DSR is exactly the correction that accounts for that search.
-
-### Pure-momentum Lasso cancellation diagnostic
-
-`scripts/inspect_momentum_lasso_coefficients.py` fits Lasso and ElasticNet on a four-feature pure-momentum panel (12-1, 18-month, 24-month, 36-month) and prints the fitted coefficients alongside the feature correlation matrix. The diagnostic confirms:
-
-1. Pairwise correlations between momentum features at 0.48–0.82 (e.g., `momentum_504 ↔ momentum_756` at 0.75).
-2. The CV-selected α drives all coefficients to (near) zero — the model collapses to predicting the intercept. The realized predictions inherit the sign of the small noisy intercept, producing systematic anti-correlation with realized returns.
-3. ElasticNet picks l1_ratio close to 1.0 (essentially pure Lasso) — L2 stabilization does not help on a heavily-collinear panel.
-
-This diagnostic supports the discussion of why pure-momentum L1 produces negative OOS IC (see [Discussion](#discussion)). **Contrast with the headline vol cluster:** there the opposite-sign coefficients are *signal* (Ridge reproduces them; the `vol_ewm − idio_vol` spread is real), whereas here the four momentum features are *truly* redundant ("did this stock rise over some multi-month window"), so the cancellation has nothing to extract and collapses to the noisy intercept. The cancel-ratio metric alone cannot tell the two apart — Ridge is the control: it shares weight on signal-bearing clusters but cannot rescue a genuinely redundant one.
-
 ### Audit-driven LightGBM v3 panel
-
-<!-- Cross-sectional dispersion is not used in the current headline (the engineered
-     v3 panel loses to the rank panel); description commented out for now. The
-     `cs_return_dispersion_20` feature and its test remain in the code.
-
-The 14-feature LightGBM v3 panel includes `cs_return_dispersion_20` — the cross-sectional standard deviation of daily log returns smoothed by 20-day rolling mean. The feature is a lookahead-safe regime conditioning variable that distinguishes high-dispersion (idiosyncratic-pricing) regimes from low-dispersion (uniform-market-move) regimes without using forward-looking labels. Implementation in `src/price_model/features/cross_features.py::CsReturnDispersion20`; lookahead safety verified by `tests/test_microstructure_features.py`.
--->
 
 The v3 panel curation (14 features chosen from a 21-feature candidate panel via gain importance + cross-feature correlation analysis) is documented inline in `config/experiments/extended_kaggle_v3_curated.yaml`; audit script in `scripts/audit_lightgbm_features.py`.
 
@@ -358,8 +317,8 @@ The regime-confined headline finding — a 6-feature linear cross-sectional regr
 **The 21-day cross-sectional signal on the post-2024 S&P 500 is approximately linear in feature space.** Three pieces of evidence:
 
 1. **The momentum factors alone capture most of the signal.** mom_504, mom_756, and mom_378 individually produce IC = +0.04 to +0.05 with no model fitting; the L1 regression's incremental edge of +0.02 IC over the best single momentum factor reflects modest additional signal from non-momentum features (low-volatility, idiosyncratic volatility, MAX effect). The dominant component is a linear momentum signal that trees would have to recover via many small splits.
-2. **Tree-ensemble gain-importance audits show feature concentration.** On the 14-feature v3 panel, three features produce 39% of LightGBM gain. The split structure devotes most of its capacity to a handful of features that L1 can express as a small number of coefficients. Trees' theoretical interaction-capturing advantage doesn't pay off here because the dominant signal isn't interactive.
-3. **Held-out-tuned trees still fall short.** With each tree Optuna-tuned (held out at 2024-12-31) on its *best* panel, the regime-confined OOS IC is +0.069 (LightGBM) / +0.061 (CatBoost) / +0.058 (XGBoost) vs OLS's +0.087 — a ~0.02–0.03 gap that is not a tuning failure (the matched-grader subsection below uses the *same* grader for every model and the gap persists; under honest HAC standard errors no tree even clears |t| > 2).
+2. **Tree-ensemble gain-importance audits show feature concentration.** On the 14-feature v3 panel, three features produce 39% of LightGBM gain. The split structure devotes most of its capacity to a handful of features that OLS can express as a small number of coefficients. Trees' theoretical interaction-capturing advantage doesn't pay off here because the dominant signal isn't interactive.
+3. **Held-out-tuned trees still fall short.** With each tree Optuna-tuned (held out at 2024-12-31) on its *best* panel, the regime-confined OOS IC is +0.069 (LightGBM) / +0.061 (CatBoost) / +0.058 (XGBoost) vs OLS's +0.087 — a ~0.02–0.03 gap.
 
 Two caveats limit how broadly this conclusion generalizes:
 
@@ -373,18 +332,7 @@ Net-of-cost ranking depends on turnover, and the two training framings give oppo
 
 **Regime-confined (headline): OLS wins net.** Trained on the bull regime, the 6-feature OLS model has gross Sharpe **+2.09** and, on the 21-day rebalance clock, turns over only **~9×/yr**, so at 20 bp round-trip it retains net **+1.85**. The 36-month momentum factor is the low-turnover champion (4×, net +1.28) but its lower gross (+0.050 IC, Sharpe +1.41) can't catch it. Tuned trees net +0.6–0.8 at 20 bp (turnover 10–11×) — and none is statistically significant once the overlap is HAC-corrected (t < 2). So in-regime, **OLS wins on both gross and net** — the first configuration in this project where the model beats momentum net-of-cost.
 
-### Why hyperparameter optimization is fragile to regime shift
 
-**Optuna minimizes CV error on training data, not OOS error on deployment data.** When the training period is a different statistical regime from the deployment period, the HPs that minimize training-period CV error don't minimize deployment-period OOS error. The gap between train-optimal HPs and deploy-optimal HPs grows with regime divergence.
-
-This is exactly the **DeMiguel-Garlappi-Uppal (2009)** result generalized: they showed that the optimal portfolio weights estimated from historical returns underperform the equal-weight (1/N) portfolio out-of-sample because estimation error in optimal weights overwhelms the theoretical benefit of optimization. The same logic applies to HP search:
-
-- **Default HPs are like 1/N.** They don't fit training data as hard, so they generalize better.
-- **Optuna-selected HPs are like Markowitz weights.** They minimize a training-period objective but inherit the estimation error.
-
-The cleanest *cross-regime* demonstration is the across-regime sweep (2020-01→2024-12): held-out Optuna at 21-day scored OOS IC +0.0187 vs default HPs' +0.0274 — even with the deployment slice excluded from HP selection, the chosen HPs *underperformed defaults*, because they were tuned across the 2022 regime break. The 5-day evidence is the same signature (Split B beats Split A on 2025+ but loses full-sample; `lambda_l1` swings two orders of magnitude across cutoffs).
-
-**This fragility is a cross-regime property, not an Optuna property.** Confine training to one regime and it disappears: in the regime-confined sweeps (Methodology table) every tuned tree's OOS IC *exceeds* its CV IC — CV becomes a reliable predictor of OOS once the folds and the test share the regime. So the practical rule is not "don't tune" but "don't tune across a regime break": verify a tuned model's OOS IC beats defaults on a held-out slice, and confine training to the deployment regime.
 
 ## Data quality and methodological limitations
 
