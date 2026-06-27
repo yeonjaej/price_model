@@ -4,6 +4,8 @@ A point-in-time (PIT) corrected cross-sectional equity return predictor on the S
 
 ## Executive summary
 
+**TL;DR:** A machine learning project proving that a simple 6-feature linear regression beats complex tree models at predicting 21-day stock returns in the current bull market.
+
 A PIT-corrected, held-out 21-day cross-sectional return predictor on the S&P 500. The headline is reported **regime-confined**: trained only on the post-2022-10 bull regime (train 2022-10-10 → 2024-11-30, single refit; trees held-out-Optuna-tuned with the cutoff at 2024-12-31) and tested on 2025-01-02 → 2026-06-24 (348 dates). This is the honest "deploy when the regime resembles recent training" scenario; the expansion on longer time-scale across-regime is to be studied.
 
 A **6-feature cross-sectional OLS regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) is the strongest model on **both** gross signal and net-of-cost return — beating long-horizon momentum and held-out-tuned LightGBM / XGBoost / CatBoost:
@@ -35,51 +37,16 @@ The result is **statistically rigorous, regime-conditional, and not deployable f
 
 The headline 21-day result is reported in terms of standard cross-sectional asset-pricing metrics, defined below. The worked example uses a small illustrative cross-section; the same formula applies at any horizon.
 
-- **Information Coefficient (IC).** Cross-sectional ranking quality of
-  the model, averaged over time.
+- **Information Coefficient (IC).** Cross-sectional ranking quality of the model, averaged over time.
+  - **Per-date IC:** The Spearman rank correlation between predictions and realized `H`-day forward excess returns for all `N_t` valid tickers on a given day `t`.
+  - **Time-averaged IC:** The unweighted average of per-date ICs across all evaluation dates.
+  - **The Overlap Problem (Worked Example):** While the 21-day target yields ~348 daily correlations, consecutive days share 20 of their 21 forward days. Thus, daily ICs are heavily autocorrelated. There are really only **~17 independent monthly observations**, meaning a naive t-stat (+10.1) overstates significance by ~√21×.
+  - **Benchmarks:** IC = +0.02 is a credible edge; +0.10 is exceptional; > +0.20 is generally unrealistic.
 
-  *Per-date IC.* On each date `t` in the evaluation window, the model
-  produces a prediction for every ticker in the cross-section that has a
-  realized forward excess return available at the model's target horizon
-  `H`. Let `N_t` be the number of such tickers on date `t` — in the
-  present universe `N_t` is on the order of 300-600. The per-date IC is
-  the Spearman rank correlation between two vectors **of length N_t**:
-  the vector of predictions and the vector of realized `H`-day forward
-  excess returns. Note that the vectors are not length `H`; the horizon
-  refers to the return target, not the number of observations.
-
-  *Time-averaged IC.* The reported IC is the unweighted average of the
-  per-date ICs across all evaluation dates (e.g., `n_dates = 348` for the
-  21-day headline OOS slice 2025-01-02 → 2026-06-24). A weak ranker on
-  most days plus one strong day does not produce a high IC; consistent
-  ranking is required.
-
-  *Worked example.* For 5 tickers with prediction ranks `[5,4,3,2,1]` and
-  realized-return ranks `[5,3,4,2,1]` (one adjacent swap),
-  `ρ = 1 − 6·Σd²/(N(N²−1)) = 1 − 12/120 = +0.90`. The headline IC of
-  +0.087 is the **average of ~348 such daily correlations** (each over ~450
-  tickers) — small per day, consistent across days. But consecutive days
-  share 20 of their 21 forward days, so those daily ICs are heavily
-  autocorrelated: there are really only **~17 independent monthly
-  observations**, which is why the naive t-stat (+10.1) overstates
-  significance ~√21×. The honest, overlap-corrected t-stat is **+2.72**
-  (see *t-stat of IC* below).
-
-  *Benchmarks.* On liquid US large-caps, IC = +0.02 (t > 2) is a credible
-  edge; +0.10 would be exceptional; > +0.20 is not realistic out-of-sample.
-
-- **t-stat of IC.** The naive form `mean(per-date IC) / (stdev(per-date
-  IC) / √n_dates)` assumes the per-date ICs are independent — but the
-  21-day forward windows overlap, so adjacent ICs are positively
-  autocorrelated and the naive t overstates significance by ~√21 ≈ 4.6×.
-  The reported t-stat applies a **Newey–West HAC correction** (Bartlett
-  kernel, lag 21 = the overlap length): `t_HAC = mean / √Var_HAC` with
-  `Var_HAC = (1/n)[γ₀ + 2·Σ_{k=1}^{21}(1 − k/22)·γ_k]` and `γ_k` the
-  lag-`k` autocovariance of the per-date IC series. For the 6-feature
-  6-feature panel this deflates t from **+10.1 (naive) to +2.72 (HAC)** —
-  still p < 0.01, but the honest figure. |t| > 1.96 ⇒ p < 0.05;
-  |t| > 2.58 ⇒ p < 0.01. (Equivalently, computing IC on the ~17
-  non-overlapping rebalance dates gives a comparable t ≈ 2.8.)
+- **t-stat of IC (HAC Corrected).** Because the 21-day forward windows overlap, adjacent ICs are positively autocorrelated.
+  - The reported t-stat applies a **Newey–West HAC correction** (Bartlett kernel, lag 21). 
+  - Formula: `t_HAC = mean / √Var_HAC` where `Var_HAC = (1/n)[γ₀ + 2·Σ_{k=1}^{21}(1 − k/22)·γ_k]`.
+  - For the 6-feature panel, this deflates the t-stat from **+10.1 (naive) to +2.72 (HAC)** — which is the honest, statistically significant figure (p < 0.01). (Equivalently, computing IC on the ~17 non-overlapping rebalance dates gives a comparable t ≈ 2.8.)
 - **Long-short Sharpe.** Annualized Sharpe ratio of a portfolio that is
   long the top-quintile predicted tickers (top 20%) and short the
   bottom-quintile (bottom 20%), equal-weighted within each leg,
