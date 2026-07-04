@@ -60,27 +60,32 @@ def test_static_predictions_yield_near_zero_turnover_after_first_day():
 
 
 def test_random_predictions_yield_high_turnover():
-    """If predictions are fully randomized every day, turnover ~ 100% per day."""
+    """Fully-randomized predictions → high turnover (book ~fully replaced each rebalance)."""
     df = _make_eval_df(daily_random_rank=True, n_dates=20, n_tickers=40, seed=2)
-    summary = compute_turnover_and_costs(df, top_frac=0.2, cost_bps=(5,))
-    # Random reshuffle should give ~80%+ daily turnover
-    assert summary.daily_turnover_mean > 0.6
+    summary = compute_turnover_and_costs(df, top_frac=0.2, cost_bps=(5,), horizon_days=5)
+    # Turnover is measured per rebalance (= horizon_days) and annualized as
+    # rebalances/year. Random reshuffling replaces ~the whole book each rebalance,
+    # so the annualized turnover is large (a slow signal would be order ~1-15x).
+    assert summary.annual_turnover > 40.0
 
 
-def test_cost_adjustment_reduces_sharpe_monotonically():
-    """Higher cost in basis points must produce lower (or equal) after-cost Sharpe."""
+def test_cost_adjustment_reduces_sharpe_at_high_cost():
+    """Net Sharpe == gross at 0 bp, and a large cost reduces it below the gross value.
+
+    Strict per-step monotonicity is NOT a mathematical invariant: net_t =
+    ret_t - 2*turnover_t*bp, and when per-rebalance turnover correlates with
+    per-rebalance returns, a small cost can shrink the return variance faster
+    than the mean and briefly *raise* the Sharpe. The robust invariant is that a
+    large enough cost pushes net Sharpe below the zero-cost (gross) value.
+    """
     df = _make_eval_df(daily_random_rank=False, n_dates=40, n_tickers=40, seed=3)
-    summary = compute_turnover_and_costs(df, top_frac=0.2, cost_bps=(0, 5, 10, 50))
+    summary = compute_turnover_and_costs(df, top_frac=0.2, cost_bps=(0, 200), horizon_days=5)
     sharpes = summary.after_cost_sharpe_by_bp
-    # At 0 bp the after-cost Sharpe should equal the gross Sharpe (or be very close)
+    # At 0 bp the after-cost Sharpe equals the gross Sharpe.
     if not math.isnan(summary.gross_long_short_sharpe) and not math.isnan(sharpes[0]):
         assert abs(sharpes[0] - summary.gross_long_short_sharpe) < 1e-9
-    # Sharpe should be monotonically non-increasing in cost
-    vals = [sharpes[b] for b in sorted(sharpes.keys())]
-    finite = [v for v in vals if not math.isnan(v)]
-    assert all(finite[i] >= finite[i + 1] for i in range(len(finite) - 1)), (
-        f"Sharpe should decrease with cost: {sharpes}"
-    )
+    # A large cost must reduce it.
+    assert sharpes[200] < sharpes[0]
 
 
 def test_zero_height_df_returns_nan():

@@ -274,6 +274,20 @@ def main() -> None:
             f"Optuna will not see any data past {max_date}."
         )
 
+    # ----- Optional regime lower bound: confine CV to dates >= train_start so the
+    # sweep's folds match the regime-confined CLI training window across panels.
+    ts_cfg = cfg.get("walk_forward", {}).get("train_start")
+    if ts_cfg:
+        # YAML may parse a bare date as a datetime.date already; accept str or date.
+        ts = ts_cfg if isinstance(ts_cfg, date) else date.fromisoformat(ts_cfg)
+        before = matrix.height
+        matrix = matrix.filter(pl.col("date") >= ts)
+        console.print(
+            f"[bold yellow]Regime lower bound[/bold yellow]: restricted to "
+            f"dates >= {ts_cfg}: {matrix.height:,} rows "
+            f"(dropped {before - matrix.height:,} pre-regime rows)."
+        )
+
     # ----- Build CV folds -----
     all_dates = sorted(matrix["date"].unique().to_list())
     folds = _purged_walk_forward_folds(all_dates, args.n_folds, args.embargo_days)

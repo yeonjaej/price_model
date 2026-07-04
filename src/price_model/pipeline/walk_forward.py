@@ -44,6 +44,8 @@ def run_walk_forward(
     store: PredictionStore | None = None,
     start: date | None = None,
     end: date | None = None,
+    train_start: date | None = None,
+    first_refit: date | None = None,
 ) -> pl.DataFrame:
     """Train + predict in a walking window. Returns a frame of all out-of-sample predictions.
 
@@ -66,12 +68,15 @@ def run_walk_forward(
             refit_freq_days=refit_freq_days,
             embargo_days=embargo_days,
             min_train_days=min_train_days,
+            first_refit=first_refit,
         )
     )
     log.info("Running %d walk-forward splits for model %s", len(splits), model.config.model_id)
 
     for i, split in enumerate(splits):
-        train = slice_train(panel, split).drop_nulls(subset=[target_col, *feature_cols])
+        train = slice_train(panel, split, train_start=train_start).drop_nulls(
+            subset=[target_col, *feature_cols]
+        )
         if train.height == 0:
             log.warning("Split %d has no training rows after dropna; skipping", i)
             continue

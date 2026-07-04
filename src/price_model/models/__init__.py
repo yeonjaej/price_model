@@ -20,6 +20,7 @@ from price_model.models.foundation import ChronosZeroShot
 from price_model.models.linear import (
     ElasticNetCrossSectional,
     LassoCrossSectional,
+    OLSCrossSectional,
     RidgeCrossSectional,
 )
 
@@ -33,6 +34,7 @@ MODEL_REGISTRY: dict[str, type[Model]] = {
     "LightGBMModel": LightGBMModel,
     "XGBoostModel": XGBoostModel,
     "CatBoostModel": CatBoostModel,
+    "OLSCrossSectional": OLSCrossSectional,
     "LassoCrossSectional": LassoCrossSectional,
     "RidgeCrossSectional": RidgeCrossSectional,
     "ElasticNetCrossSectional": ElasticNetCrossSectional,
@@ -67,6 +69,7 @@ __all__ = [
     "Model",
     "ModelConfig",
     "MomentumFactor",
+    "OLSCrossSectional",
     "RidgeCrossSectional",
     "XGBoostModel",
     "ZeroPredictor",

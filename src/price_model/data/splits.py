@@ -33,14 +33,21 @@ def walk_forward_splits(
     refit_freq_days: int = 21,  # ~monthly
     embargo_days: int = 6,  # must be >= horizon
     min_train_days: int = 252 * 2,  # ~2y warmup before first refit
+    first_refit: date | None = None,  # absolute first-refit date (overrides min_train_days)
 ) -> Iterator[Split]:
-    """Yield Split objects covering [start + min_train_days, end]."""
+    """Yield Split objects covering the evaluation window.
+
+    By default the first refit is `start + min_train_days` (relative to the
+    panel's first date, i.e. warmup end — which varies by feature panel). Pass an
+    absolute `first_refit` date to pin the first prediction date independent of
+    warmup, so different feature panels share an identical train/test boundary.
+    """
     if embargo_days < 1:
         raise ValueError("embargo_days must be >= 1")
     if refit_freq_days < 1:
         raise ValueError("refit_freq_days must be >= 1")
 
-    first_refit = start + timedelta(days=min_train_days)
+    first_refit = first_refit if first_refit is not None else start + timedelta(days=min_train_days)
     refit = first_refit
     while refit <= end:
         train_end = refit - timedelta(days=embargo_days)
@@ -58,8 +65,23 @@ def walk_forward_splits(
         refit += timedelta(days=refit_freq_days)
 
 
-def slice_train(panel: pl.DataFrame, split: Split, date_col: str = "date") -> pl.DataFrame:
-    return panel.filter(pl.col(date_col) <= pl.lit(split.train_end))
+def slice_train(
+    panel: pl.DataFrame,
+    split: Split,
+    date_col: str = "date",
+    train_start: date | None = None,
+) -> pl.DataFrame:
+    """Training rows for a split: `date <= train_end`, optionally also `>= train_start`.
+
+    `train_start` is the regime lower bound — used to confine training to a single
+    regime (e.g. only the post-2022-10 bull regime) identically across feature
+    panels regardless of each panel's warmup length. None (default) preserves the
+    original expanding-window-from-panel-start behavior.
+    """
+    out = panel.filter(pl.col(date_col) <= pl.lit(split.train_end))
+    if train_start is not None:
+        out = out.filter(pl.col(date_col) >= pl.lit(train_start))
+    return out
 
 
 def slice_test(panel: pl.DataFrame, split: Split, date_col: str = "date") -> pl.DataFrame:

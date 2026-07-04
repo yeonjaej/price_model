@@ -1,0 +1,66 @@
+# 8-feature LightGBM variant — exploratory companion to lasso_curated6_pit_h21.
+#
+# Why this exists
+# ---------------
+# The matched-grader comparison (scripts/spectrum_comparison.py,
+# scripts/matched_grader_comparison.py) put every model on the SAME purged
+# forward-chain, IC-scored selection and the SAME bullish-regime split, and found:
+#
+#   - L1 == L2 (Lasso ties Ridge to 4 decimals).
+#   - Linear BEATS LightGBM on both the rank and the engineered panels.
+#   - Different model classes want different panel SIZES: linear peaks at 6
+#     features; LightGBM does best dropping ONLY beta_60 (8 features), because it
+#     can still use idio_vol_20 / max_return_21d via interactions that linear can't.
+#     Cutting LightGBM all the way to 6 features HURTS it (IC +0.0525 -> +0.0451).
+#   - beta_60 is the tree's #1 feature by gain (18.8%) yet removing it does not hurt
+#     (Sharpe +0.93 -> +1.03) — the same anti-generalizing feature it is for linear.
+#
+# This config is the LightGBM optimum on the rank panel (drop beta_60 only). It is
+# EXPLORATORY: even at its own best panel, LightGBM (~IC +0.053) trails the
+# 6-feature linear model (~IC +0.088) on this universe/regime/horizon. The signal
+# is not complex enough to need trees; documented here for completeness.
+
+experiment_id: lightgbm_curated8_pit_h21
+
+data:
+  universe: sp500_pit
+  start: 2017-01-01
+  pit_filter: true
+
+features:
+  - momentum_12_1
+  - momentum_756
+  - return_1d
+  - vol_ewm_20
+  - idio_vol_20
+  - max_return_21d
+  - distance_52w_high
+  - log_dollar_volume
+  # beta_60 deliberately dropped (anti-generalizing; #1 gain importance).
+
+normalize_kind: rank
+target_horizon: 21
+
+walk_forward:
+  refit_freq_days: 252
+  embargo_days: 22
+  min_train_days: 504
+
+models:
+  - id: zero_v1_curated8_baseline_h21
+    class: ZeroPredictor
+    params: {}
+
+  - id: lightgbm_curated8_pit_h21
+    class: LightGBMModel
+    params:
+      # Simplest config the purged-forward-chain IC grader selected — the honest
+      # grader pushes the tree toward minimum complexity on this near-linear signal.
+      learning_rate: 0.05
+      num_leaves: 15
+      min_data_in_leaf: 100
+      feature_fraction: 0.9
+      bagging_fraction: 0.9
+      bagging_freq: 5
+      n_estimators: 500
+      seeds: [42]

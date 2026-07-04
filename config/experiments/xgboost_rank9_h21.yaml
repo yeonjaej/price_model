@@ -1,0 +1,41 @@
+# XGBoost on the 9-feature RANK anomaly panel (the linear headline's family).
+# Companion to extended_kaggle_v3_xgboost_h21 (14-feature zscore): lets the
+# headline pick XGBoost's BETTER panel under held-out Optuna.
+#   python scripts/optuna_sweep.py --experiment xgboost_rank9_h21 \
+#       --n-trials <N> --n-folds 4 --embargo-days 22 --max-date 2024-12-31 --write-tuned
+
+experiment_id: xgboost_rank9_h21
+data: {universe: sp500_pit, start: 2017-01-01, pit_filter: true}
+features:
+  - momentum_12_1
+  - momentum_756
+  - return_1d
+  - vol_ewm_20
+  - idio_vol_20
+  - max_return_21d
+  - distance_52w_high
+  - log_dollar_volume
+  - beta_60
+normalize_kind: rank
+target_horizon: 21
+walk_forward:  # regime-confined (this branch): single refit on bull regime, test 2025+
+  refit_freq_days: 9999
+  embargo_days: 33          # calendar; covers the 21 trading-day (~31 cal) horizon
+  min_train_days: 504       # ignored when first_refit is set
+  train_start: 2022-10-10   # all panels train on rows >= regime start, identically
+  first_refit: 2025-01-02   # single refit -> train [2022-10-10, 2024-11-30], test 2025+
+models:
+  - {id: zero_v1_rank9_xgb_baseline_h21, class: ZeroPredictor, params: {}}
+  - id: xgboost_rank9_h21
+    class: XGBoostModel
+    params:
+      learning_rate: 0.05
+      max_depth: 6
+      min_child_weight: 20
+      subsample: 0.8
+      colsample_bytree: 0.8
+      reg_alpha: 0.1
+      reg_lambda: 5.0
+      n_estimators: 500
+      tree_method: hist
+      seeds: [42, 2024, 12345]

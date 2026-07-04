@@ -96,7 +96,7 @@ def main() -> None:
     lasso_cfg = ModelConfig(
         model_id="momentum_lasso_diag",
         feature_cols=tuple(FEATS),
-        params={"cv": 5, "max_iter": 5000},
+        params={"cv": 3, "max_iter": 5000},
     )
     lasso = build_model("LassoCrossSectional", lasso_cfg)
     lasso.fit(train)
@@ -119,7 +119,7 @@ def main() -> None:
     enet_cfg = ModelConfig(
         model_id="momentum_elasticnet_diag",
         feature_cols=tuple(FEATS),
-        params={"cv": 5, "max_iter": 5000},
+        params={"cv": 3, "max_iter": 5000},
     )
     enet = build_model("ElasticNetCrossSectional", enet_cfg)
     enet.fit(train)

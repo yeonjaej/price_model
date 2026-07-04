@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -94,6 +95,20 @@ def run_experiment(
     )
     matrix = drop_warmup_rows(matrix, cfg["features"])
 
+    # Optional regime lower bound: confine training rows to `date >= train_start`
+    # across all panels regardless of warmup length (e.g. single-regime backtests).
+    # YAML parses a bare `2022-10-10` into a datetime.date already; accept str or date.
+    def _as_date(v: object) -> date | None:
+        if not v:
+            return None
+        return v if isinstance(v, date) else date.fromisoformat(str(v))
+
+    train_start = _as_date(cfg["walk_forward"].get("train_start"))
+    # Optional absolute first-refit date: pins the train/test boundary independent
+    # of each panel's warmup length (warmup-end varies, so min_train_days alone
+    # cannot align panels). When set, min_train_days is ignored for refit timing.
+    first_refit = _as_date(cfg["walk_forward"].get("first_refit"))
+
     store = PredictionStore()
     try:
         all_preds_by_model: list[pl.DataFrame] = []
@@ -122,6 +137,8 @@ def run_experiment(
                 refit_freq_days=cfg["walk_forward"]["refit_freq_days"],
                 embargo_days=cfg["walk_forward"]["embargo_days"],
                 min_train_days=cfg["walk_forward"]["min_train_days"],
+                train_start=train_start,
+                first_refit=first_refit,
                 store=store,
             )
             preds = preds.with_columns(pl.lit(m["id"]).alias("model_id"))
