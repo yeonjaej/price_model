@@ -10,7 +10,7 @@ A PIT-corrected, held-out 21-day cross-sectional return predictor on the S&P 500
 
 A **6-feature cross-sectional OLS regression** on documented academic anomalies (Han-He-Rapach-Zhou 2024) is the strongest model on **both** gross signal and net-of-cost return — beating long-horizon momentum and held-out-tuned LightGBM / XGBoost / CatBoost:
 
-Long-short Sharpe is for a **top-20% / bottom-20% (quintile), equal-weighted** portfolio, computed on the **~17 non-overlapping 21-day rebalances** of the test window; net columns deduct round-trip turnover × cost (3 / 10 / 20 bp per side). **Gross IC** is the per-date rank correlation averaged over all OOS dates, but its **t-stat is Newey–West HAC-corrected (Bartlett lag 21)** to account for the 21-day return overlap — the naive daily t (≈ 10) is inflated ~√21× by that overlap and is *not* the honest figure. See [Metric definitions](#metric-definitions).
+Long-short Sharpe is for a **top-20% / bottom-20% (quintile), equal-weighted** portfolio, computed on the **~17 non-overlapping 21-day rebalances** of the test window; net columns deduct round-trip turnover × cost (3 / 10 / 20 bp per side). **Gross IC** is the per-date rank correlation averaged over all OOS dates, but its **t-stat is Newey–West HAC-corrected (Bartlett lag 21)** to account for the 21-day return overlap — the naive daily t (≈ 10) is inflated ~3.7× by that overlap (realized deflation +10.1 → +2.72; √21 ≈ 4.6× is the perfect-overlap upper bound) and is *not* the honest figure. See [Metric definitions](#metric-definitions).
 
 | Model (regime-confined) | Gross IC | t-stat (HAC) | Gross Sharpe | Net 3 bp | Net 10 bp | Net 20 bp | Annual turnover |
 |---|---|---|---|---|---|---|---|
@@ -35,12 +35,12 @@ The result is **statistically rigorous, regime-conditional, and not deployable f
 
 ## Metric definitions
 
-The headline 21-day result is reported in terms of standard cross-sectional asset-pricing metrics, defined below. The worked example uses a small illustrative cross-section; the same formula applies at any horizon.
+The headline 21-day result is reported in terms of standard cross-sectional asset-pricing metrics, defined below; the same formulas apply at any horizon.
 
 - **Information Coefficient (IC).** Cross-sectional ranking quality of the model, averaged over time.
   - **Per-date IC:** The Spearman rank correlation between predictions and realized `H`-day forward excess returns for all `N_t` valid tickers on a given day `t`.
   - **Time-averaged IC:** The unweighted average of per-date ICs across all evaluation dates.
-  - **The Overlap Problem (Worked Example):** While the 21-day target yields ~348 daily correlations, consecutive days share 20 of their 21 forward days. Thus, daily ICs are heavily autocorrelated. There are really only **~17 independent monthly observations**, meaning a naive t-stat (+10.1) overstates significance by ~√21×.
+  - **The Overlap Problem (Worked Example):** While the 21-day target yields ~348 daily correlations, consecutive days share 20 of their 21 forward days. Thus, daily ICs are heavily autocorrelated. There are really only **~17 independent monthly observations**, so a naive t-stat (+10.1) overstates significance ~3.7× (it deflates to +2.72; √21 ≈ 4.6× is the perfect-overlap ceiling).
   - **Benchmarks:** IC = +0.02 is a credible edge; +0.10 is exceptional; > +0.20 is generally unrealistic.
 
 - **t-stat of IC (HAC Corrected).** Because the 21-day forward windows overlap, adjacent ICs are positively autocorrelated.
@@ -258,7 +258,7 @@ The headline uses **6 features** — the 9-feature anomaly panel below, minus `i
 
 Gross IC and gross long-short Sharpe assume costless rebalancing. Net-of-cost Sharpe accounts for transaction-cost drag from portfolio turnover. Because the signal targets a 21-day horizon, the book is held over the horizon and **per-rebalance turnover** is the L1 distance between the long-short weight vector and its value 21 trading days earlier (`0.5 · Σ_i |w_t[i] − w_{t-21}[i]|`). Annual turnover = `mean(per-rebalance turnover) × (252/21)` (≈ 12 rebalances/year). **After-cost return** = gross return − `turnover × cost_bps / 10000 × 2`, where the `× 2` is the round trip (in and out). After-cost Sharpe is computed on the net-return series with the same `√(252 / horizon)` annualization as gross Sharpe. (Measuring turnover on a 1-day lag — the previous convention — charged daily churn against a 21-day return and over-stated turnover ~21×.)
 
-Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-equivalent). Turnover and cost-drag mechanics are implemented in `src/price_model/eval/turnover.py`. For the **regime-confined headline** use `scripts/net_cost_regime_21d.py` — it pulls each model from the store and reports the IC point estimate with its HAC-corrected t-stat plus gross/net Sharpe on the **non-overlapping 21-day rebalance schedule** (the headline convention); `scripts/net_cost_regime.py` reports the same on the daily-overlap estimator. Avoid the shared `scripts/compare_net_of_cost.py`: it intersects the full accumulated store (many overlapping historical runs) and drops most of the new regime models.
+Reported at 3 bp (institutional all-in), 10 bp (small-fund), and 20 bp (retail-equivalent). Turnover and cost-drag mechanics are implemented in `src/price_model/eval/turnover.py`. For the **regime-confined headline** use `scripts/net_cost_regime_21d.py` — it **fits the linear family (OLS / Ridge / Lasso on curated-6) fresh** with the temporal IC-scored CV, reads the trees + momentum from the store, and reports the IC point estimate with its HAC-corrected t-stat plus gross/net Sharpe on the **non-overlapping 21-day rebalance schedule** (the headline convention); `scripts/net_cost_regime.py` reports the same on the daily-overlap estimator. Avoid the shared `scripts/compare_net_of_cost.py`: it intersects the full accumulated store (many overlapping historical runs) and drops most of the new regime models.
 
 <!-- Deflated Sharpe is not used in the current regime-confined headline; subsection
      commented out for now (scripts/deflated_sharpe_audit.py remains). Restore if DSR
@@ -283,7 +283,7 @@ The regime-confined headline finding — a 6-feature linear cross-sectional regr
 
 **The 21-day cross-sectional signal on the post-2024 S&P 500 is approximately linear in feature space.** Three pieces of evidence:
 
-1. **The momentum factors alone capture most of the signal.** mom_504, mom_756, and mom_378 individually produce IC = +0.04 to +0.05 with no model fitting; the L1 regression's incremental edge of +0.02 IC over the best single momentum factor reflects modest additional signal from non-momentum features (low-volatility, idiosyncratic volatility, MAX effect). The dominant component is a linear momentum signal that trees would have to recover via many small splits.
+1. **The momentum factors alone capture most of the signal.** mom_504, mom_756, and mom_378 individually produce IC = +0.04 to +0.05 with no model fitting; the OLS regression's incremental edge of +0.02 IC over the best single momentum factor reflects modest additional signal from the non-momentum features it keeps (low-volatility `vol_ewm_20`, 52-week-high anchoring, liquidity). The dominant component is a linear momentum signal that trees would have to recover via many small splits.
 2. **Tree-ensemble gain-importance audits show feature concentration.** On the 14-feature v3 panel, three features produce 39% of LightGBM gain. The split structure devotes most of its capacity to a handful of features that OLS can express as a small number of coefficients. Trees' theoretical interaction-capturing advantage doesn't pay off here because the dominant signal isn't interactive.
 3. **Held-out-tuned trees still fall short.** With each tree Optuna-tuned (held out at 2024-12-31) on its *best* panel, the regime-confined OOS IC is +0.069 (LightGBM) / +0.061 (CatBoost) / +0.058 (XGBoost) vs OLS's +0.087 — a ~0.02–0.03 gap.
 
@@ -371,7 +371,7 @@ Three small lookup tables are maintained in
 | Table | Purpose | Size |
 |---|---|---|
 | `TICKER_ALIASES` | Map renamed symbols to their successor (FB → META, RTN → RTX, ~70 entries documented with rename dates) | 73 entries |
-| `TICKER_DROP_LIST` | Symbols with no usable yfinance data (failed banks, acquired with non-unified history, foreign listings, short-ticker parser failures) | ~25 entries |
+| `TICKER_DROP_LIST` | Symbols with no usable yfinance data (failed banks, acquired with non-unified history, foreign listings, short-ticker parser failures) | 38 entries |
 | `SYMBOL_NORMALIZATION` | Punctuation convention (BRK.B → BRK-B) | 2 entries |
 
 The function `resolve_ticker(symbol) -> str | None` applies all three in
@@ -443,8 +443,8 @@ Notebooks (each maps to one or more README sections; together they provide inter
 - `notebooks/01_prediction_diagnostics.ipynb` — Stored-prediction diagnostics on the headline 21-day models: apples-to-apples comparison, rolling 60-day IC, regime-conditional IC, net-of-cost gross-vs-net Sharpe with turnover annotation. Supports the net-of-cost and regime-conditionality analysis in Discussion.
 - `notebooks/02_classical_timeseries.ipynb` — Classical EMH baselines (ARIMA / GARCH / GBM) on the per-ticker time series, contrasted with the cross-sectional linear model. Supports the case that the cross-sectional approach beats per-ticker time-series baselines.
 - `notebooks/03_headline_robustness.ipynb` — Bootstrap CI / decile bucket monotonicity / time-split partition on the linear headline. Supports the regime-conditionality analysis.
-- `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Now also includes the **panel-ablation findings** (9→6 prune, `beta_60` anti-generalizing, regularization-inert OLS≡Ridge≡Lasso, vol-cluster-is-signal). Supports Methodology (panel design) + Discussion's [Matched-grader comparison](#matched-grader-comparison-is-it-the-model-the-panel-or-the-grader).
-- `notebooks/06_hp_selection_bias.ipynb` — Visualizes the **cross-regime** HP fragility: chosen HPs swinging across training cutoffs (`lambda_l1` over ~two orders of magnitude) and the held-out-vs-default inversion at 21-day. Supports Discussion's [HP-fragility subsection](#why-hyperparameter-optimization-is-fragile-to-regime-shift) — contrast with the **in-regime** sweeps in Methodology, where CV predicts OOS.
+- `notebooks/05_feature_exploration.ipynb` — Feature engineering boilerplate: 41-feature registry tour, distributions, correlations, fitted L1 / LightGBM importance, and a step-by-step template for adding new features. Now also includes the **panel-ablation findings** (9→6 prune, `beta_60` anti-generalizing, regularization-inert OLS≡Ridge≡Lasso, vol-cluster-is-signal). Supports Methodology (panel design) and the panel-ablation findings (9→6 prune; regularization-inert OLS ≡ Ridge ≡ Lasso).
+- `notebooks/06_hp_selection_bias.ipynb` — Visualizes the **cross-regime** HP fragility: chosen HPs swinging across training cutoffs (`lambda_l1` over ~two orders of magnitude) and the held-out-vs-default inversion at 21-day. Contrast with the **in-regime** sweeps in [Methodology's Optuna protocol](#held-out-optuna-protocol-for-lightgbm-hyperparameter-search), where CV predicts OOS.
 
 **Extras (independent of the cross-sectional ML narrative):**
 
@@ -503,7 +503,7 @@ a product of the above collaboration.
 - **Fama, E. and French, K.** (2015). "A Five-Factor Asset Pricing Model." *Journal of Financial Economics* 116(1). — FF5 baseline (reference only; not in the headline comparison due to Kenneth French release-lag truncation).
 - **Zou, H. and Hastie, T.** (2005). "Regularization and Variable Selection via the Elastic Net." *Journal of the Royal Statistical Society, Series B* 67(2). — ElasticNet model class.
 - **Bailey, D. and López de Prado, M.** (2014). "The Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting, and Non-Normality." *Journal of Portfolio Management* 40(5). — Multi-test Sharpe correction.
-- **DeMiguel, V., Garlappi, L., and Uppal, R.** (2009). "Optimal Versus Naive Diversification: How Inefficient is the 1/N Portfolio Strategy?" *Review of Financial Studies* 22(5). — The estimation-error-dominates-optimization result referenced in the Discussion's "Why HP optimization is fragile to regime shift" subsection.
+- **DeMiguel, V., Garlappi, L., and Uppal, R.** (2009). "Optimal Versus Naive Diversification: How Inefficient is the 1/N Portfolio Strategy?" *Review of Financial Studies* 22(5). — The estimation-error-dominates-optimization result underlying the cross-regime HP-fragility caveat.
 - **López de Prado, M.** (2018). *Advances in Financial Machine Learning.* Wiley. — Purged walk-forward cross-validation (Ch. 7).
 - **Ken French Data Library.** Daily factor returns. https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
 - **Wikipedia: List of S&P 500 companies.** Historical components and change log. https://en.wikipedia.org/wiki/List_of_S%26P_500_companies

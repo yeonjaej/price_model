@@ -1,0 +1,90 @@
+# 6-feature curated variant of lasso_elasso_pit_h21 (the headline panel, pruned).
+#
+# Why this exists
+# ---------------
+# Ablation on the 9-feature headline panel (scripts/ablate_headline_panel.py,
+# scripts/vol_ablation_lasso_ridge.py) shows that three of the nine features are
+# net-harmful or redundant at the 21-day horizon on the 2025+ slice:
+#
+#   - beta_60         : MOST-USED feature by tree gain (18.8%) yet removing it
+#                       RAISES out-of-sample IC and Sharpe — a textbook
+#                       "fits in-sample, anti-generalizes out-of-sample" feature.
+#                       Market beta is regime-unstable; the learned tilt does not
+#                       persist into the 2025 momentum/AI regime.
+#   - max_return_21d  : roughly neutral once beta_60 is removed.
+#   - idio_vol_20     : marginal — its (vol_ewm - idio_vol) spread carries a small
+#                       real low-vol signal, but the net effect of removing it is tiny.
+#
+# Dropping all three (keeping vol_ewm_20 as the single low-vol representative)
+# moves OOS IC +0.077 -> +0.088 and gross L/S Sharpe +1.17 -> ~1.97 on the matched
+# bullish-regime split, IDENTICALLY for Lasso and Ridge (L1 vs L2 is a coin flip
+# on this panel). Dropping the LAST vol feature (vol_ewm_20 too) collapses the
+# signal, so exactly one low-vol representative is load-bearing.
+#
+# Scope caveats (see README Discussion / Scope):
+#   - This is a SINGLE regime (2022-10+) and a single OOS window; the edge is
+#     regime-conditional, not stationary.
+#   - Numbers are GROSS of cost; the Lasso's turnover still erodes net Sharpe.
+#   - embargo_days below is kept at 22 (matching lasso_elasso_pit_h21) so this is
+#     a clean A/B against the headline. NOTE: 22 *calendar* days does not fully
+#     cover the 21 *trading*-day forward target (~31 calendar days); a fully
+#     airtight embargo would be ~31. Revisit when re-benchmarking.
+
+experiment_id: lasso_curated6_nopit_h21
+
+data:
+  universe: sp500
+  start: 2017-01-01
+  pit_filter: false
+
+features:
+  - momentum_12_1
+  - momentum_756
+  - return_1d
+  - vol_ewm_20
+  - distance_52w_high
+  - log_dollar_volume
+
+normalize_kind: rank
+target_horizon: 21
+
+walk_forward:
+  # Regime-confined: one refit trained on the bull regime only, test 2025+.
+  # train_start (harness param) confines training rows to >= 2022-10-10 across
+  # all panels regardless of warmup; min_train_days lands the single refit at
+  # ~2025-01-02 (panel start 2017-01-03 + 2921d); refit_freq 9999 => one block.
+  refit_freq_days: 9999
+  embargo_days: 33          # calendar; covers the 21 trading-day (~31 cal) horizon
+  min_train_days: 504       # ignored when first_refit is set
+  train_start: 2022-10-10   # all panels train on rows >= regime start, identically
+  first_refit: 2025-01-02   # single refit -> train [2022-10-10, 2024-11-30], test 2025+
+
+models:
+  - id: zero_v1_curated6_baseline_nopit_h21
+    class: ZeroPredictor
+    params: {}
+
+  # OLS is the honest headline: on this 6-feature panel the IC-scored forward-chain
+  # CV drives Lasso/Ridge to alpha->0, so they reduce to plain OLS. No penalty, no CV.
+  - id: ols_curated6_nopit_h21
+    class: OLSCrossSectional
+    params:
+      fit_intercept: true
+
+  - id: lasso_curated6_nopit_h21
+    class: LassoCrossSectional
+    params:
+      cv: 3
+      max_iter: 5000
+      tol: 1.0e-4
+      selection: cyclic
+      fit_intercept: true
+
+  # L1 vs L2 is empirically a tie on this panel (matched-grader comparison);
+  # the Ridge variant is provided for the direct comparison and as the
+  # collinearity-robust alternative.
+  - id: ridge_curated6_nopit_h21
+    class: RidgeCrossSectional
+    params:
+      cv: 3
+      fit_intercept: true
