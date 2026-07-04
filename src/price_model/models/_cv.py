@@ -20,7 +20,8 @@ the same temporally-honest way. The return value is an explicit list of
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -186,7 +187,7 @@ def select_alpha_by_ic(
         tag = f"[{label}] " if label else ""
         n_dates = np.unique(dates).size
         print(
-            f"\n{tag}training matrix: {X.shape[0]} rows × {X.shape[1]} features "
+            f"\n{tag}training matrix: {X.shape[0]} rows x {X.shape[1]} features "
             f"over {n_dates} dates (~{X.shape[0] / max(n_dates, 1):.0f} names/date)"
         )
         print(f"{tag}purged forward-chain CV — {len(fold_groups)} folds (embargo applied):")

@@ -72,5 +72,5 @@ def test_datetime64_dates_supported():
 
 
 def test_too_few_dates_raises():
-    with pytest.raises(ValueError, match="unique dates|too short"):
+    with pytest.raises(ValueError, match=r"unique dates|too short"):
         purged_forward_chain_folds(np.array([1, 1, 2, 2]), n_splits=5, embargo=21)
