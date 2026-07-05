@@ -231,7 +231,7 @@ def select_alpha_by_ic(
 
     if verbose:
         tag = f"[{label}] " if label else ""
-        ranked = sorted(table, key=lambda t: (t[1] if np.isfinite(t[1]) else -np.inf), reverse=True)
+        ranked = sorted(table, key=lambda t: t[1] if np.isfinite(t[1]) else -np.inf, reverse=True)
         print(f"{tag}candidate scores (mean CV IC), top 10 of {len(table)}:")
         for params, score in ranked[:10]:
             extra = f" l1={params['l1_ratio']:.2f}" if "l1_ratio" in params else ""

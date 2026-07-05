@@ -141,9 +141,7 @@ def _long_short_weights_and_returns(
     return weights_seq, returns_seq, dates_seq
 
 
-def _one_sided_turnover_series(
-    weights_seq: list[dict[str, float]], lag: int = 1
-) -> list[float]:
+def _one_sided_turnover_series(weights_seq: list[dict[str, float]], lag: int = 1) -> list[float]:
     """One-sided turnover over a `lag`-observation holding period:
 
         turnover_t = 0.5 * sum_i | w_t[i] - w_{t-lag}[i] |.

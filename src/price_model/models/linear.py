@@ -155,7 +155,10 @@ class LassoCrossSectional(Model):
         best, _, _ = select_alpha_by_ic(
             [{"alpha": float(a)} for a in alphas],
             lambda p: Lasso(alpha=p["alpha"], **common),
-            X, y, dates, folds,
+            X,
+            y,
+            dates,
+            folds,
             verbose=bool(self.config.params.get("verbose", False)),
             label=self.config.model_id,
         )
@@ -311,7 +314,10 @@ class RidgeCrossSectional(Model):
         best, _, _ = select_alpha_by_ic(
             [{"alpha": float(a)} for a in alphas],
             lambda p: Ridge(alpha=p["alpha"], fit_intercept=params["fit_intercept"]),
-            X, y, dates, folds,
+            X,
+            y,
+            dates,
+            folds,
             verbose=bool(self.config.params.get("verbose", False)),
             label=self.config.model_id,
         )
@@ -482,7 +488,10 @@ class ElasticNetCrossSectional(Model):
         best, _, _ = select_alpha_by_ic(
             candidates,
             lambda p: ElasticNet(alpha=p["alpha"], l1_ratio=p["l1_ratio"], **common),
-            X, y, dates, folds,
+            X,
+            y,
+            dates,
+            folds,
             verbose=bool(self.config.params.get("verbose", False)),
             label=self.config.model_id,
         )
