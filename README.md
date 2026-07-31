@@ -16,9 +16,9 @@ Long-short Sharpe is for a **top-20% / bottom-20% (quintile), equal-weighted** p
 |---|---|---|---|---|---|---|---|
 | **OLS, 6-feature** (Ridge ≡ Lasso) | **+0.0871** | **+2.72** | **+2.09** | **+2.05** | **+1.97** | **+1.85** | 9× |
 | 36-month momentum factor | +0.0497 | +2.31 | +1.41 | +1.39 | +1.34 | +1.28 | 4× |
-| LightGBM, held-out Optuna (rank panel) | +0.0689 | +1.64 | +1.06 | +1.02 | +0.93 | +0.79 | 11× |
-| CatBoost, held-out Optuna (rank panel) | +0.0610 | +1.30 | +0.91 | +0.88 | +0.81 | +0.71 | 10× |
-| XGBoost, held-out Optuna (rank panel) | +0.0586 | +1.29 | +0.80 | +0.76 | +0.69 | +0.58 | 10× |
+| LightGBM, held-out Optuna | +0.0689 | +1.64 | +1.06 | +1.02 | +0.93 | +0.79 | 11× |
+| CatBoost, held-out Optuna | +0.0610 | +1.30 | +0.91 | +0.88 | +0.81 | +0.71 | 10× |
+| XGBoost, held-out Optuna | +0.0586 | +1.29 | +0.80 | +0.76 | +0.69 | +0.58 | 10× |
 
 Only **OLS (HAC t +2.72)** and **momentum (+2.31)** are individually significant; **none of the tuned trees clears |t| > 2 once the overlap is corrected** (+1.3 to +1.6), so their apparent edge is not distinguishable from zero on this window.
 
@@ -27,7 +27,7 @@ Observations:
 - **OLS wins gross *and* net** — the only configuration in this project where the model beats momentum net-of-cost, and by a wide margin: gross Sharpe **+2.09** and, because the curated 6-feature book turns over only ~9×/yr, **net +1.85** at 20 bp (vs momentum +1.28 and the best tree +0.79).
 - **Regularization is inert — the model is plain OLS.** On this panel the IC-scored forward-chain CV drives both Lasso and Ridge to α→0; all three (OLS ≡ Ridge ≡ Lasso) produce **identical** predictions to every digit. With ~238k training rows × 6 features the Gram matrix is hugely over-determined, so shrinkage has nothing to do — the CV-IC curve decays monotonically with α. The story is the **curated panel**, not the regularizer. (Pruning the prior 9-feature panel to 6 — dropping `idio_vol_20`, `max_return_21d`, and the anti-generalizing `beta_60` — is most of the lift.)
 - **Every tuned tree trails — and none is statistically significant.** Even with held-out Optuna on each tree's *best* panel (all three prefer the 9-feature rank panel over the 14-feature engineered one), the trees net +0.6–0.8 at 20 bp, and once the 21-day overlap is HAC-corrected their IC t-stats fall to +1.3–1.6 — not distinguishable from zero. The signal is near-linear; trees over-parameterize it.
-- **The honest t-stat is +2.72, not ~+10.** The naive daily IC t treats 348 overlapping-window ICs as independent; the 21-day overlap means there are really only ~17 independent monthly observations. The HAC correction (lag 21) deflates the OLS t from +10.1 to **+2.72** — still significant at p < 0.01, but a far cry from the inflated figure.
+- **The honest t-stat is +2.72, not ~+10.** The naive daily IC t treats 348 overlapping-window ICs as independent; the 21-day overlap means there are really only ~17 independent monthly observations. The HAC correction (lag 21) deflates the OLS t from +10.1 to **+2.72** — still significant at p < 0.01.
 
 For the technical setup (PIT correction, regime-confined walk-forward with embargo, the unified temporal IC-scored CV), see [Methodology](#methodology); for why OLS beats trees, why the edge is regime-bound, why regularization is inert, and the net-of-cost analysis, see [Discussion](#discussion).
 
@@ -46,7 +46,7 @@ The headline 21-day result is reported in terms of standard cross-sectional asse
 - **t-stat of IC (HAC Corrected).** Because the 21-day forward windows overlap, adjacent ICs are positively autocorrelated.
   - The reported t-stat applies a **Newey–West HAC correction** (Bartlett kernel, lag 21). 
   - Formula: `t_HAC = mean / √Var_HAC` where `Var_HAC = (1/n)[γ₀ + 2·Σ_{k=1}^{21}(1 − k/22)·γ_k]`.
-  - For the 6-feature panel, this deflates the t-stat from **+10.1 (naive) to +2.72 (HAC)** — which is the honest, statistically significant figure (p < 0.01). (Equivalently, computing IC on the ~17 non-overlapping rebalance dates gives a comparable t ≈ 2.8.)
+  - For the 6-feature panel, this deflates the t-stat from **+10.1 (naive) to +2.72 (HAC)** — which is the honest, statistically significant figure (p < 0.01). 
 - **Long-short Sharpe.** Annualized Sharpe ratio of a portfolio that is
   long the top-quintile predicted tickers (top 20%) and short the
   bottom-quintile (bottom 20%), equal-weighted within each leg,
@@ -292,6 +292,26 @@ Two caveats limit how broadly this conclusion generalizes:
 - **The 6-feature panel is small and ex-ante-curated.** The linear advantage depends on this curation. On the broader 14-feature engineered panel the linear recipe is weaker — but so are the trees (every model is worse there), so curation, not model class, is the lever.
 - **The post-2022-10 regime is structurally momentum-friendly.** In a regime with more leadership rotation or weaker momentum persistence, the linear-on-anomalies recipe would compress and trees might catch up. The result is robust within the studied window but has not been verified across regime changes.
 The conclusion is therefore "within the post-2022-10 regime, on this universe at this horizon, a curated 6-feature OLS outperforms every tree-ensemble variant tested" — not "ML cannot succeed in cross-sectional equity prediction generally," and not "the edge is regime-robust."
+
+### What the frozen OLS learned: feature ranking
+
+Because every feature is **cross-sectionally rank-normalized to a uniform [0,1] within each date** (`normalize_kind="rank"`; smallest raw value → rank ~0, largest → 1.0), all six coefficients share the same scale *and* the same marginal distribution. The fitted β magnitudes are therefore directly comparable and read as feature importance: each β is the predicted difference in 21-day market-neutral return between the top-ranked and bottom-ranked name on that feature, holding the other five fixed. The table is the single frozen headline fit (train 2022-10-10 → 2024-11-29, intercept −0.0065), pairing each feature's standalone univariate IC (mean per-date Spearman over the same window) with its partial multivariate coefficient:
+
+| rank (\|β\|) | feature | univariate IC | partial β | reads as |
+|---|---|---|---|---|
+| 1 | `vol_ewm_20` | +0.0250 | +0.00593 | high-vol → +0.59% (in-regime low-vol **inversion**) |
+| 2 | `momentum_12_1` | +0.0128 | +0.00428 | 12-1 winners → +0.43% |
+| 3 | `log_dollar_volume` | +0.0187 | +0.00403 | liquid/megacap → +0.40% |
+| 4 | `momentum_756` | +0.0131 | +0.00269 | 3-yr trend → +0.27% |
+| 5 | `return_1d` | −0.0107 | −0.00217 | yesterday's winners → −0.22% (short-term reversal) |
+| 6 | `distance_52w_high` | −0.0042 | −0.00125 | near 52w-high → −0.13% |
+
+Two reads:
+
+- **`vol_ewm_20` is the strongest driver**, both standalone (IC +0.025) and partial (β +0.0059), and its sign is *positive* — an inversion of the textbook low-volatility anomaly, because high-beta names led the post-2022 recovery. `distance_52w_high` is the weakest on both measures.
+- **Univariate IC and partial β agree in sign on all six features** (the only reshuffle is `momentum_12_1` vs `log_dollar_volume` swapping 2nd/3rd), so the multivariate fit has **no collinearity sign-flips** — each feature's partial contribution points the same way as its standalone signal. Compare magnitudes *within* a column, not across: β is in return units per unit of rank, IC is a rank correlation.
+
+Reproduce with `notebooks/04_linear_regression.ipynb` (the univariate-IC-vs-partial-β cell) or `scripts/inspect_headline_lasso_coefficients.py`.
 
 ### Net-of-cost: turnover, and the framing that flips the winner
 
