@@ -21,10 +21,13 @@ NON-OVERLAPPING 21-day schedule (dates[::21], ~17 books each held to expiry):
   turnover     : one-sided book replacement per rebalance, annualized * (252/21).
   net @b bp    : spread - turnover * b/1e4 * 2 (round-trip), same annualization.
 
-Usage: PYTHONPATH=src .venv/bin/python scripts/net_cost_regime_21d.py
+Usage: PYTHONPATH=src .venv/bin/python scripts/net_cost_regime_21d.py [--end YYYY-MM-DD]
+  --end caps the last SCORED test date (inclusive); full history is still loaded so
+  the 21-day forward target stays valid up to --end. Omit to use all available dates.
 """
 from __future__ import annotations
 
+import argparse
 import warnings
 from datetime import date
 
@@ -135,6 +138,19 @@ def _add_row(t: Table, label: str, j: pl.DataFrame) -> None:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--end",
+        type=date.fromisoformat,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Cap the last SCORED test date (inclusive). Full price history is still "
+        "loaded so the 21-day forward target stays valid up to --end. Omit for all "
+        "available dates (last scorable date = panel max - 21 trading days).",
+    )
+    args = ap.parse_args()
+    end: date | None = args.end
+
     con = Console()
     con.print("Building realized 21-day excess-return panel...")
     raw = filter_panel_to_pit(load_panel(universe="sp500_pit", start="2017-01-01", pit_filter=False))
@@ -145,7 +161,15 @@ def main() -> None:
     m = build_feature_matrix(raw, FEATS6, "rank", 21).pipe(drop_warmup_rows, FEATS6).sort(["ticker", "date"])
     target = m.select("date", "ticker", "y")
 
-    t = Table(title="Regime-confined honest 21-day headline (test 2025+, top_frac=0.2): IC all-dates + HAC t; portfolio non-overlap")
+    # Scored-date window: [OOS_START, end]. end=None => all available dates.
+    win = pl.col("date") >= OOS_START
+    if end is not None:
+        win = win & (pl.col("date") <= end)
+    date_info: tuple[int, object, object] | None = None
+
+    end_tag = f" .. {end}" if end is not None else ""
+    t = Table(title=f"Regime-confined honest 21-day headline (test 2025-01{end_tag}, "
+                     "top_frac=0.2): IC all-dates + HAC t; portfolio non-overlap")
     cols = ("model", "IC (all)", "t naive", "t HAC", "n_reb", "gross Sh", "ann.turn", "net@3", "net@10", "net@20")
     for c in cols:
         t.add_column(c, justify=("left" if c == "model" else "right"))
@@ -153,11 +177,15 @@ def main() -> None:
     # --- linear family, fit fresh (OLS / Ridge / Lasso on curated-6) ---
     for label, cls in LINEAR_FRESH:
         con.print(f"fitting {label} (fresh, temporal IC CV) ...")
-        model = build_model(cls, ModelConfig(label, tuple(FEATS6), "y", {"cv": 3}))
+        # OLS ignores params; Ridge/Lasso default to cv=3 (linear.py) — no need to pass it.
+        model = build_model(cls, ModelConfig(label, tuple(FEATS6), "y", {}))
         p = run_walk_forward(m, model=model, feature_cols=FEATS6, target_col="y", experiment_id="x",
                              horizon_days=21, refit_freq_days=9999, embargo_days=33, min_train_days=504,
                              train_start=TRAIN_START, first_refit=FIRST_REFIT)
-        j = join_with_realized(p, target).filter(pl.col("date") >= OOS_START)
+        j = join_with_realized(p, target).filter(win)
+        if date_info is None:
+            dd = j.select("date").unique()
+            date_info = (dd.height, dd["date"].min(), dd["date"].max())
         _add_row(t, label, j)
     t.add_section()
 
@@ -178,13 +206,18 @@ def main() -> None:
         if df.height == 0:
             con.print(f"[red]no predictions in store for {mid}")
             continue
-        j = df.join(tgt, on=["date", "ticker"], how="left").filter(pl.col("date") >= OOS_START)
+        j = df.join(tgt, on=["date", "ticker"], how="left").filter(win)
         _add_row(t, label, j)
 
     con.print(t)
-    con.print("\n[dim]Linear family fit fresh (curated-6, temporal IC CV cv=3); trees + momentum from store. "
-              "IC & t use all ~348 daily dates; t HAC = Newey-West Bartlett lag 21. "
-              "gross Sh / turn / net use the ~17 non-overlapping 21-day rebalances.[/dim]")
+    if date_info is not None:
+        n_dates, d0, d1 = date_info
+        span = f"all {n_dates} daily dates ({d0} .. {d1})"
+    else:
+        span = "all daily dates"
+    con.print(f"\n[dim]Linear family fit fresh (curated-6, temporal IC CV cv=3); trees + momentum from store. "
+              f"IC & t use {span}; t HAC = Newey-West Bartlett lag 21. "
+              "gross Sh / turn / net use the non-overlapping 21-day rebalances (dates[::21]).[/dim]")
 
 
 if __name__ == "__main__":
